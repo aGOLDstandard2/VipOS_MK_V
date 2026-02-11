@@ -77,6 +77,7 @@ app.post('/api/v1/bg-random', express.json(), (req, res) => {
 })
 
 app.post('/api/v1/text', express.json(), (req, res) => {
+  io.emit('bg-alert');
   io.emit('text-alert', { message: req.body.msg });
   res.sendStatus(200);
 })
