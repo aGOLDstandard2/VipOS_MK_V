@@ -317,14 +317,14 @@ a:hover {color: var(--featured-color-hover);}
 -------------------------------------------------------------------------------*/
 #commands-bar {
   height: 100px;
-  left: 0;
+  left: 30px;
   position: absolute;
   top: 0;
 
   div.command {
     display: inline-block;
     height: 100px;
-    padding: 0 25px;
+    padding: 0 20px 0 10px;
     position: relative;
     top: -100px;
 
@@ -336,8 +336,8 @@ a:hover {color: var(--featured-color-hover);}
       text-shadow: -2px 2px #00fffc, -4px 4px #ff00f0, -6px 6px #000;
     }
 
-    &.discord { animation: commandbar 30s ease infinite; }
-    &.lurk    { animation: commandbar 30s ease infinite; animation-delay: 0.2s; }
+    &.discord { animation: commandbar 90s ease infinite; }
+    &.lurk    { animation: commandbar 90s ease infinite; animation-delay: 0.2s; }
   }
 }
 
