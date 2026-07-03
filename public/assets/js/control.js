@@ -36,9 +36,6 @@ async function refreshStatus() {
     const data = await response.json();
     statusEl.textContent = [
       `OBS ${data.obs.identified ? 'online' : 'offline'}`,
-      `Chat offline`,
-      // TO-DO: Implement chat status check
-      //`Chat ${data.chat.connected ? 'online' : 'offline'}`,
       `${data.sockets.clients} socket${data.sockets.clients === 1 ? '' : 's'}`
     ].join(' | ');
   } catch (error) {

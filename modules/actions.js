@@ -125,15 +125,6 @@ function createActionRunner({ io, obs, logger = console }) {
         return { type, input, mediaAction }
       }
 
-      // TO-DO: Implement chat service
-      // case 'chat.say': {
-      //   if (!chatService) throw new Error('Chat service is not registered')
-      //   const message = hydrate(action.message, context)
-      //   if (!message) throw new Error('chat.say requires a message')
-      //   await chatService.say(message, action.channel)
-      //   return { type, message }
-      // }
-
       default:
         throw new Error(`Unknown action type: ${type}`)
     }
