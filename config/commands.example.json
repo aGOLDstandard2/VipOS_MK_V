@@ -4,7 +4,8 @@
     "roles": ["broadcaster", "mod"],
     "cooldownSeconds": 5,
     "actions": [
-      { "type": "overlay.alert", "message": "VipOS MK V is online." }
+      { "type": "overlay.alert", "message": "VipOS MK V is online." },
+      { "type": "chat.say", "message": "VipOS MK V is online.", "reply": true }
     ]
   },
   {
@@ -37,6 +38,16 @@
     "cooldownSeconds": 5,
     "actions": [
       { "type": "sound.play", "src": "example.mp3", "volume": 0.8 }
+    ]
+  },
+  {
+    "command": "!hello",
+    "aliases": ["!hi"],
+    "roles": ["everyone"],
+    "cooldownScope": "user",
+    "cooldownSeconds": 30,
+    "actions": [
+      { "type": "chat.say", "message": "Hey {displayName}.", "reply": true }
     ]
   }
 ]
