@@ -82,6 +82,17 @@ function createActionRunner({ io, obs, logger = console }) {
         return { type, src, volume }
       }
 
+      case 'chat.say': {
+        if (!chatService) throw new Error('Twitch chat is not configured')
+        const message = hydrate(action.message || action.text, context)
+        if (!message) throw new Error('chat.say requires a message')
+
+        const explicitReplyId = hydrate(action.replyParentMessageId || action.replyTo, context)
+        const replyParentMessageId = explicitReplyId || (parseToggle(action.reply) === true ? context.messageId : undefined)
+        const sent = await chatService.say(message, { replyParentMessageId })
+        return { type, message, ...sent }
+      }
+
       case 'obs.scene': {
         const scene = hydrate(action.scene, context)
         if (!scene) throw new Error('obs.scene requires a scene')

@@ -13,6 +13,14 @@
 
 ## Chat Commands
 Copy `config/commands.example.json` to `config/commands.json` and edit the commands/actions for your stream.
+The commands file is watched and reloaded while the app is running.
+
+Chat uses Twitch EventSub WebSockets for inbound messages and the Twitch Send Chat Message API for bot replies. Authorize the bot account with:
+
+- `user:read:chat`
+- `user:write:chat`
+
+Set `TWITCH_BOT_ACCESS_TOKEN` and `TWITCH_BOT_REFRESH_TOKEN` in `.env`. Refreshed token data is written to `config/twitch-token.json`, which should stay out of git.
 
 Action types currently supported:
 - `overlay.alert`
@@ -22,5 +30,5 @@ Action types currently supported:
 - `obs.source`
 - `obs.mute`
 - `obs.media`
-<!-- - `chat.say` -->
+- `chat.say`
 - `delay`

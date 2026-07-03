@@ -12,6 +12,7 @@ const favicon = require('serve-favicon')
 const path = require('path')
 
 const { createActionRunner, validateSoundSrc } = require('./modules/actions')
+const { createChatService } = require('./modules/chat')
 const { createObsService } = require('./modules/obs')
 
 const PORT = Number(process.env.PORT) || 5000
@@ -39,6 +40,8 @@ const io = new Server(server, {
 
 const obs = createObsService()
 const actions = createActionRunner({ io, obs })
+const chat = createChatService({ actions })
+actions.setChatService(chat)
 
 
 /**
@@ -172,6 +175,7 @@ app.get('/api/v1/status', (req, res) => {
       port: PORT
     },
     obs: obs.getStatus(),
+    chat: chat.getStatus(),
     sockets: {
       clients: io.engine.clientsCount
     }
@@ -238,6 +242,14 @@ app.post('/api/v1/sound', asyncHandler(async (req, res) => {
   res.json({ ok: true, results })
 }))
 
+app.post('/api/v1/chat/say', asyncHandler(async (req, res) => {
+  const message = getBodyMessage(req)
+  if (!message) return res.status(400).json({ error: 'message or msg is required' })
+
+  const result = await chat.say(message)
+  res.json({ ok: true, result })
+}))
+
 app.post('/api/v1/obs/scene', asyncHandler(async (req, res) => {
   const { scene } = req.body
   const results = await actions.run({ type: 'obs.scene', scene }, { source: 'api' })
@@ -292,7 +304,8 @@ app.use((err, req, res, next) => {
  * Listen on port
  *
  */
-server.listen(PORT, async () => {
+server.listen(PORT, '127.0.0.1', async () => {
   console.log(`server is listening on port ${PORT}....`)
   obs.connect()
+  chat.start()
 })

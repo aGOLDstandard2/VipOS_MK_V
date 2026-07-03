@@ -8,7 +8,15 @@ async function postJson(endpoint, data = {}) {
     body: JSON.stringify(data)
   });
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : { ok: response.ok };
+  let payload = { ok: response.ok };
+
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch (error) {
+      throw new Error(`Expected JSON from ${endpoint}, got ${response.status} ${response.statusText}`);
+    }
+  }
 
   if (!response.ok) {
     throw new Error(payload.error || response.statusText);
@@ -36,6 +44,7 @@ async function refreshStatus() {
     const data = await response.json();
     statusEl.textContent = [
       `OBS ${data.obs.identified ? 'online' : 'offline'}`,
+      `Chat ${data.chat.connected ? 'online' : (data.chat.enabled ? 'offline' : 'disabled')}`,
       `${data.sockets.clients} socket${data.sockets.clients === 1 ? '' : 's'}`
     ].join(' | ');
   } catch (error) {
