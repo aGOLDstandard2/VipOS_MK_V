@@ -6,12 +6,12 @@ socket.on('bg-alert', function () {
     animatedBG.classList.toggle('alert');
     bgAlertTimeout = setTimeout(() => {
       animatedBG.classList.toggle('alert');
-    }, "3000");
+    }, 3000);
   } else {
     clearTimeout( bgAlertTimeout );
-    textAlertTimeout = setTimeout(() => {
+    bgAlertTimeout = setTimeout(() => {
       animatedBG.classList.toggle('alert');
-    }, "3000");
+    }, 3000);
   }
 });
 
@@ -26,6 +26,11 @@ socket.on('bg-random', function() {
   }
   animatedBG.classList.remove("random1", "random2", "random3", "random4", "random5", "random6");
   animatedBG.classList.add("random"+num);
+});
+
+socket.on('bg-reset', function() {
+  animatedBG.classList.remove("random1", "random2", "random3", "random4", "random5", "random6");
+  animatedBG.classList.add("random1");
 });
 
 function getRandomInt(min, max) {

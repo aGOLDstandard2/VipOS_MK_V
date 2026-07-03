@@ -1,16 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title><%= process.env.APP_NAME %></title>
+<%
+const pageName = typeof appName !== "undefined" ? appName : (process.env.APP_NAME || "VipOS MK V");
+const pageDescription = typeof appDescription !== "undefined" ? appDescription : (process.env.APP_DESCRIPTION || "Chat Bot + Overlay Platform");
+const pageBodyClass = typeof bodyClass !== "undefined" ? bodyClass : "";
+%>
+<title><%= pageName %></title>
 <meta charset="utf-8">
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="<%= process.env.APP_NAME %> | <%= process.env.APP_DESCRIPTION %>" />
+<meta name="description" content="<%= pageName %> | <%= pageDescription %>" />
 <meta name="author" content="v i p e r" />
-<link rel="stylesheet" href="/assets/css/styles.css" /><% if( typeof(loadSocket) != "undefined") { %>
+<link rel="stylesheet" href="/assets/css/styles.css" />
+<% if (typeof extraStyles !== "undefined") { extraStyles.forEach(function(stylePath) { %>
+<link rel="stylesheet" href="<%= stylePath %>" />
+<% }); } %>
+<% if( typeof(loadSocket) != "undefined") { %>
 <script src="/socket.io/socket.io.js"></script>
 <script type="text/javascript">
-var socket = io('http://localhost:<%= process.env.PORT %>');
+window.VIPOS_SOCKET = io();
+var socket = window.VIPOS_SOCKET;
 </script><% } %>
 </head>
-<body>
+<body class="<%= pageBodyClass %>">

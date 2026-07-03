@@ -1,0 +1,42 @@
+[
+  {
+    "command": "!vipos",
+    "roles": ["broadcaster", "mod"],
+    "cooldownSeconds": 5,
+    "actions": [
+      { "type": "overlay.alert", "message": "VipOS MK V is online." }
+    ]
+  },
+  {
+    "command": "!alert",
+    "roles": ["broadcaster", "mod", "vip"],
+    "cooldownSeconds": 5,
+    "actions": [
+      { "type": "overlay.alert", "message": "{after}" }
+    ]
+  },
+  {
+    "command": "!border",
+    "roles": ["broadcaster", "mod"],
+    "cooldownSeconds": 5,
+    "actions": [
+      { "type": "overlay.emit", "event": "bg-random" }
+    ]
+  },
+  {
+    "command": "!brb",
+    "roles": ["broadcaster", "mod"],
+    "cooldownSeconds": 10,
+    "actions": [
+      { "type": "obs.scene", "scene": "BRB" }
+    ]
+  },
+  {
+    "command": "!sfx",
+    "roles": ["broadcaster", "mod"],
+    "cooldownSeconds": 5,
+    "actions": [
+      { "type": "sound.play", "src": "example.mp3", "volume": 0.8 }
+    ]
+  }
+]
