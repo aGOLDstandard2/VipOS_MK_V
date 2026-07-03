@@ -246,8 +246,8 @@ app.post('/api/v1/chat/say', asyncHandler(async (req, res) => {
   const message = getBodyMessage(req)
   if (!message) return res.status(400).json({ error: 'message or msg is required' })
 
-  const result = await chat.say(message)
-  res.json({ ok: true, result })
+  const results = await actions.run({ type: 'chat.say', message }, { source: 'api' })
+  res.json({ ok: true, results })
 }))
 
 app.post('/api/v1/obs/scene', asyncHandler(async (req, res) => {
