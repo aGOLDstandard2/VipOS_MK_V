@@ -47,8 +47,13 @@ const actions = createActionRunner({ io, obs })
 
 
 /**
- * Setup static directory
- * and rendering engine
+ * Application Middleware initialization
+ * - static directory and rendering engine
+ * - CORS for API endpoints
+ * - JSON body parsing for API endpoints
+ * - favicon
+ * - local JSON mutation requirement for API endpoints
+ * - app.locals for app name and description
  *
  */
 app.use(express.static(path.join(__dirname, 'public')))
@@ -64,17 +69,32 @@ app.use('/api/v1', requireLocalJsonMutation)
 app.use(express.json({ limit: '1mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(favicon(path.join(__dirname, '/public/assets/img/favicon.ico')))
-
 app.locals.appName = APP_NAME
 app.locals.appDescription = APP_DESCRIPTION
 
+
+/**
+ * Async Handler for Express Routes
+ * Get body message from request (body.message, body.msg, or query.message)
+ *
+ */
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 const getBodyMessage = req => req.body.message || req.body.msg || req.query.message || ''
 
+
+/**
+ * Check if the origin is allowed based on the ALLOWED_ORIGINS
+ *
+ */
 function isAllowedOrigin(origin) {
   return !origin || ALLOWED_ORIGINS.has(origin)
 }
 
+
+/**
+ * Require local JSON mutation for API endpoints
+ *
+ */
 function requireLocalJsonMutation(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
 
@@ -149,7 +169,6 @@ app.get('/overlay/venom-coin', (req, res) => {
  * API Endpoints
  *
  */
-
 app.get('/api/v1/status', (req, res) => {
   res.json({
     app: {
