@@ -1,53 +1,79 @@
-[
-  {
-    "command": "!vipos",
-    "roles": ["broadcaster", "mod"],
-    "cooldownSeconds": 5,
-    "actions": [
-      { "type": "overlay.alert", "message": "VipOS MK V is online." },
-      { "type": "chat.say", "message": "VipOS MK V is online.", "reply": true }
-    ]
-  },
-  {
-    "command": "!alert",
-    "roles": ["broadcaster", "mod", "vip"],
-    "cooldownSeconds": 5,
-    "actions": [
-      { "type": "overlay.alert", "message": "{after}" }
-    ]
-  },
-  {
-    "command": "!border",
-    "roles": ["broadcaster", "mod"],
-    "cooldownSeconds": 5,
-    "actions": [
-      { "type": "overlay.emit", "event": "bg-random" }
-    ]
-  },
-  {
-    "command": "!brb",
-    "roles": ["broadcaster", "mod"],
-    "cooldownSeconds": 10,
-    "actions": [
-      { "type": "obs.scene", "scene": "BRB" }
-    ]
-  },
-  {
-    "command": "!sfx",
-    "roles": ["broadcaster", "mod"],
-    "cooldownSeconds": 5,
-    "actions": [
-      { "type": "sound.play", "src": "example.mp3", "volume": 0.8 }
-    ]
-  },
-  {
-    "command": "!hello",
-    "aliases": ["!hi"],
-    "roles": ["everyone"],
-    "cooldownScope": "user",
-    "cooldownSeconds": 30,
-    "actions": [
-      { "type": "chat.say", "message": "Hey {displayName}.", "reply": true }
-    ]
-  }
-]
+{
+  "commands": [
+    {
+      "command": "!vipos",
+      "roles": ["broadcaster", "mod"],
+      "cooldownSeconds": 5,
+      "actions": [
+        { "type": "overlay.alert", "message": "VipOS MK V is online." },
+        { "type": "chat.say", "message": "VipOS MK V is online.", "reply": true }
+      ]
+    },
+    {
+      "command": "!alert",
+      "roles": ["broadcaster", "mod", "vip"],
+      "cooldownSeconds": 5,
+      "actions": [
+        { "type": "overlay.alert", "message": "{after}" }
+      ]
+    },
+    {
+      "command": "!border",
+      "roles": ["broadcaster", "mod"],
+      "cooldownSeconds": 5,
+      "actions": [
+        { "type": "overlay.emit", "event": "bg-random" }
+      ]
+    },
+    {
+      "command": "!brb",
+      "roles": ["broadcaster", "mod"],
+      "cooldownSeconds": 10,
+      "actions": [
+        { "type": "obs.scene", "scene": "BRB" }
+      ]
+    },
+    {
+      "command": "!sfx",
+      "roles": ["broadcaster", "mod"],
+      "cooldownSeconds": 5,
+      "actions": [
+        { "type": "sound.play", "src": "example.mp3", "volume": 0.8 }
+      ]
+    },
+    {
+      "command": "!hello",
+      "aliases": ["!hi"],
+      "roles": ["everyone"],
+      "cooldownScope": "user",
+      "cooldownSeconds": 30,
+      "actions": [
+        { "type": "chat.say", "message": "Hey {displayName}.", "reply": true }
+      ]
+    }
+  ],
+  "redemptions": [
+    {
+      "name": "hydrate",
+      "match": {
+        "rewardTitle": "Hydrate"
+      },
+      "cooldownScope": "user",
+      "cooldownSeconds": 10,
+      "actions": [
+        { "type": "overlay.alert", "message": "{displayName} redeemed {reward.title}: {redemption.input}" },
+        { "type": "chat.say", "message": "Thanks for the {reward.title}, {displayName}!" }
+      ]
+    },
+    {
+      "name": "song-request",
+      "match": {
+        "rewardId": "replace_with_twitch_reward_id",
+        "inputContains": "http"
+      },
+      "actions": [
+        { "type": "overlay.alert", "message": "{displayName} requested: {redemption.input}" }
+      ]
+    }
+  ]
+}

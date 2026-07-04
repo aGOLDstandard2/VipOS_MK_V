@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
 <%
 const pageName = typeof appName !== "undefined" ? appName : (process.env.APP_NAME || "VipOS MK V");
 const pageDescription = typeof appDescription !== "undefined" ? appDescription : (process.env.APP_DESCRIPTION || "Chat Bot + Overlay Platform");
-const pageBodyClass = typeof bodyClass !== "undefined" ? bodyClass : "";
+const pageClass = typeof customClass !== "undefined" ? customClass : "";
 %>
+<html lang="en" class="<%= pageClass %>">
+<head>
 <title><%= pageName %></title>
 <meta charset="utf-8">
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
@@ -23,4 +23,4 @@ window.VIPOS_SOCKET = io();
 var socket = window.VIPOS_SOCKET;
 </script><% } %>
 </head>
-<body class="<%= pageBodyClass %>">
+<body class="<%= pageClass %>">

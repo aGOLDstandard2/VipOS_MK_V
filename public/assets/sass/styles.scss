@@ -13,6 +13,13 @@ body {
   height: 1080px;
   overflow: hidden;
   width: 1920px;
+
+  &.index-page,
+  &.control-page {
+    height: 100%;
+    overflow: auto;
+    width: 100%;
+  }
 }
 
 body {

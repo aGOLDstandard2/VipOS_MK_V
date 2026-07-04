@@ -125,7 +125,9 @@ function requireLocalJsonMutation(req, res, next) {
  *
  */
 app.get('/', (req, res) => {
-  res.render('index.ejs')
+  res.render('index.ejs', {
+    customClass: 'index-page'
+  })
 })
 
 
@@ -135,7 +137,7 @@ app.get('/', (req, res) => {
  */
 app.get('/control', (req, res) => {
   res.render('control.ejs', {
-    bodyClass: 'control-page',
+    customClass: 'control-page',
     loadSocket: true,
     extraStyles: ['/assets/css/control.css']
   })

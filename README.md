@@ -22,6 +22,64 @@ Chat uses Twitch EventSub WebSockets for inbound messages and the Twitch Send Ch
 
 Set `TWITCH_BOT_ACCESS_TOKEN` and `TWITCH_BOT_REFRESH_TOKEN` in `.env`. Refreshed token data is written to `config/twitch-token.json`, which should stay out of git.
 
+## Channel Point Rewards
+Channel point custom rewards and automatic reward redemptions require the broadcaster account to authorize one of:
+
+- `channel:read:redemptions`
+- `channel:manage:redemptions`
+
+Set `TWITCH_BROADCASTER_ACCESS_TOKEN` and `TWITCH_BROADCASTER_REFRESH_TOKEN` in `.env`, or leave `CHAT_ENABLE_REDEMPTIONS=false` for chat-only mode. Refreshed broadcaster token data is written to `config/twitch-broadcaster-token.json`.
+
+Suggested future-friendly broadcaster scopes:
+
+```text
+bits:read channel:read:redemptions channel:manage:redemptions channel:read:polls channel:manage:polls channel:read:predictions channel:manage:predictions channel:read:goals channel:read:hype_train channel:read:subscriptions channel:read:vips channel:read:ads channel:read:charity moderator:read:followers moderator:read:chatters
+```
+
+`config/commands.json` may be either the original command array or an object with:
+
+- `commands`
+- `redemptions`
+- `redemptionUpdates`
+- `automaticRedemptions`
+- `rewardEvents`
+
+Reward action templates can use values like `{displayName}`, `{message}`, `{reward.title}`, `{reward.id}`, `{reward.cost}`, `{redemption.input}`, and `{automaticReward.type}`.
+
+For normal channel point usage, use `redemptions`; Twitch calls this event `redemption.add` because a viewer has added a new redemption. `redemptionUpdates`, `automaticRedemptions`, and `rewardEvents` are optional advanced handler groups, and the service only subscribes to those extra EventSub topics when handlers are configured for them at startup.
+
+Redemption handlers can be catch-all, or they can include a `match` object:
+
+```json
+{
+  "redemptions": [
+    {
+      "name": "hydrate",
+      "match": {
+        "rewardTitle": "Hydrate"
+      },
+      "actions": [
+        { "type": "overlay.alert", "message": "{displayName} redeemed {reward.title}" }
+      ]
+    },
+    {
+      "name": "song-request",
+      "match": {
+        "rewardId": "replace_with_twitch_reward_id",
+        "inputContains": "http"
+      },
+      "actions": [
+        { "type": "overlay.alert", "message": "{displayName} requested: {redemption.input}" }
+      ]
+    }
+  ]
+}
+```
+
+Supported `match` fields include `event`, `rewardId`, `rewardTitle`, `rewardType`, `status`, `userId`, `username`, `displayName`, `inputContains`, and `inputMatches`.
+
+Use `status` only when you intentionally want to separate queued/manual reward states like `unfulfilled`, `fulfilled`, or `canceled`.
+
 Action types currently supported:
 - `overlay.alert`
 - `overlay.emit`
@@ -32,3 +90,4 @@ Action types currently supported:
 - `obs.media`
 - `chat.say`
 - `delay`
+- `log`

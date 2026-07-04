@@ -2,12 +2,15 @@ const fs = require('fs')
 const path = require('path')
 
 const CHAT_INTENT = 'chat'
+const REDEMPTION_INTENT = 'redemptions'
 const DEFAULT_COMMAND_PREFIX = '!'
 const DEFAULT_TOKEN_FILE = path.join(__dirname, '..', 'config', 'twitch-token.json')
+const DEFAULT_BROADCASTER_TOKEN_FILE = path.join(__dirname, '..', 'config', 'twitch-broadcaster-token.json')
 const DEFAULT_COMMANDS_FILE = path.join(__dirname, '..', 'config', 'commands.json')
 const DEFAULT_RECONNECT_INITIAL_MS = 5000
 const DEFAULT_RECONNECT_MAX_MS = 60000
 const REQUIRED_SCOPES = ['user:read:chat', 'user:write:chat']
+const REDEMPTION_SCOPES = ['channel:read:redemptions', 'channel:manage:redemptions']
 
 let twurpleModules = null
 
@@ -19,12 +22,20 @@ function createChatService({ actions, logger = console } = {}) {
 
   let api = null
   let authProvider = null
+  let automaticRedemptionHandlers = []
   let commandMap = new Map()
   let commandWatcherStarted = false
   let commands = []
   let listener = null
+  let redemptionHandlers = []
+  let redemptionUpdateHandlers = []
+  let rewardRetryAttempt = 0
+  let rewardRetryTimer = null
   let retryAttempt = 0
   let retryTimer = null
+  let rewardEventHandlers = []
+  let rewardSubscriptionRegistrars = new Map()
+  let rewardSubscriptionRetryQueue = new Map()
   let shouldRun = false
   let started = false
   let starting = false
@@ -36,17 +47,35 @@ function createChatService({ actions, logger = console } = {}) {
     authMode: null,
     botUserId: config.botUserId || null,
     botUserName: normalizeLogin(config.botUsername) || null,
+    broadcasterAuthUserId: null,
     broadcasterId: config.broadcasterId || null,
     broadcasterName: normalizeLogin(config.broadcasterLogin) || null,
+    broadcasterTokenFile: relativePath(config.broadcasterTokenFile),
     commandCount: 0,
     commandsLoadedAt: null,
     commandsLastError: null,
     commandsPath: relativePath(config.commandsFile),
+    automaticRedemptionHandlerCount: 0,
     lastCommandAt: null,
     lastError: null,
     lastMessageAt: null,
+    lastRedemption: null,
+    lastRedemptionAt: null,
+    lastRedemptionMatchedHandlers: 0,
+    lastRewardEvent: null,
+    lastRewardEventAt: null,
+    lastRewardEventMatchedHandlers: 0,
     messageCount: 0,
     nextRetryAt: null,
+    redemptionCount: 0,
+    redemptionHandlerCount: 0,
+    redemptionUpdateHandlerCount: 0,
+    rewardsEnabled: config.enableRedemptions,
+    rewardsLastError: null,
+    rewardsNextRetryAt: null,
+    rewardEventCount: 0,
+    rewardEventHandlerCount: 0,
+    rewardsRetryAttempt: 0,
     retryAttempt: 0,
     tokenFile: relativePath(config.tokenFile)
   }
@@ -70,12 +99,16 @@ function createChatService({ actions, logger = console } = {}) {
       authProvider = auth.authProvider
       state.authMode = auth.mode
       state.botUserId = auth.botUserId
+      state.broadcasterAuthUserId = auth.broadcasterUserId || null
 
       api = new twurple.ApiClient({ authProvider })
 
       const broadcaster = await resolveBroadcaster(api, config)
       state.broadcasterId = broadcaster.id
       state.broadcasterName = broadcaster.name
+      if (state.broadcasterAuthUserId && state.broadcasterAuthUserId !== state.broadcasterId) {
+        throw new Error('TWITCH_BROADCASTER_REFRESH_TOKEN must belong to TWITCH_CHANNEL')
+      }
 
       if (!state.botUserName) {
         const botUser = await api.users.getUserById(state.botUserId)
@@ -92,6 +125,7 @@ function createChatService({ actions, logger = console } = {}) {
           logger.error(`Twitch chat message handler failed: ${error.message}`)
         })
       })
+      bindRewardSubscriptions(listener)
 
       listener.start()
       if (!shouldRun) {
@@ -128,6 +162,9 @@ function createChatService({ actions, logger = console } = {}) {
     started = false
     state.started = false
     state.connected = false
+    resetRewardRetry()
+    rewardSubscriptionRegistrars = new Map()
+    rewardSubscriptionRetryQueue = new Map()
   }
 
   function scheduleRetry() {
@@ -200,22 +237,172 @@ function createChatService({ actions, logger = console } = {}) {
         state.connected = false
         if (error) state.lastError = error.message
         logger.warn(`Twitch EventSub socket disconnected${error ? `: ${error.message}` : ''}`)
+      } else if (userId === state.broadcasterAuthUserId) {
+        if (error) state.rewardsLastError = error.message
+        logger.warn(`Twitch reward EventSub socket disconnected${error ? `: ${error.message}` : ''}`)
       }
     })
 
     eventSubListener.onSubscriptionCreateFailure((subscription, error) => {
+      if (isRewardSubscription(subscription)) {
+        state.rewardsLastError = error.message
+        logger.error(`Twitch reward subscription failed (${subscription.id}): ${error.message}`)
+        scheduleRewardSubscriptionRetry(subscription)
+        return
+      }
+
       state.lastError = error.message
       logger.error(`Twitch EventSub subscription failed (${subscription.id}): ${error.message}`)
       cleanupListener()
       scheduleRetry()
     })
 
+    eventSubListener.onSubscriptionCreateSuccess(subscription => {
+      if (isRewardSubscription(subscription)) {
+        rewardSubscriptionRetryQueue.delete(subscription.id)
+        state.rewardsLastError = null
+        if (!rewardSubscriptionRetryQueue.size && !rewardRetryTimer) {
+          rewardRetryAttempt = 0
+          state.rewardsRetryAttempt = 0
+          state.rewardsNextRetryAt = null
+        }
+      }
+    })
+
     eventSubListener.onRevoke(subscription => {
+      if (isRewardSubscription(subscription)) {
+        state.rewardsLastError = `Subscription revoked: ${subscription.id}`
+        logger.warn(`Twitch reward subscription revoked: ${subscription.id}`)
+        scheduleRewardSubscriptionRetry(subscription)
+        return
+      }
+
       state.lastError = `Subscription revoked: ${subscription.id}`
       logger.warn(`Twitch EventSub subscription revoked: ${subscription.id}`)
       cleanupListener()
       scheduleRetry()
     })
+  }
+
+  function bindRewardSubscriptions(eventSubListener) {
+    if (!config.enableRedemptions) return
+    if (!state.broadcasterAuthUserId) {
+      state.rewardsLastError = 'Broadcaster token is required for Twitch reward events'
+      logger.warn(state.rewardsLastError)
+      return
+    }
+
+    trackRewardSubscription(() => eventSubListener.onChannelRedemptionAdd(state.broadcasterId, event => {
+      handleRedemption('redemption.add', event).catch(error => {
+        state.rewardsLastError = error.message
+        logger.error(`Twitch redemption handler failed: ${error.message}`)
+      })
+    }))
+
+    if (redemptionUpdateHandlers.length) {
+      trackRewardSubscription(() => eventSubListener.onChannelRedemptionUpdate(state.broadcasterId, event => {
+        handleRedemption('redemption.update', event).catch(error => {
+          state.rewardsLastError = error.message
+          logger.error(`Twitch redemption update handler failed: ${error.message}`)
+        })
+      }))
+    }
+
+    if (automaticRedemptionHandlers.length) {
+      trackRewardSubscription(() => eventSubListener.onChannelAutomaticRewardRedemptionAddV2(state.broadcasterId, event => {
+        handleAutomaticRedemption(event).catch(error => {
+          state.rewardsLastError = error.message
+          logger.error(`Twitch automatic redemption handler failed: ${error.message}`)
+        })
+      }))
+    }
+
+    if (shouldBindRewardEvent('reward.add')) {
+      trackRewardSubscription(() => eventSubListener.onChannelRewardAdd(state.broadcasterId, event => {
+        handleRewardEvent('reward.add', event).catch(error => {
+          state.rewardsLastError = error.message
+          logger.error(`Twitch reward add handler failed: ${error.message}`)
+        })
+      }))
+    }
+
+    if (shouldBindRewardEvent('reward.update')) {
+      trackRewardSubscription(() => eventSubListener.onChannelRewardUpdate(state.broadcasterId, event => {
+        handleRewardEvent('reward.update', event).catch(error => {
+          state.rewardsLastError = error.message
+          logger.error(`Twitch reward update handler failed: ${error.message}`)
+        })
+      }))
+    }
+
+    if (shouldBindRewardEvent('reward.remove')) {
+      trackRewardSubscription(() => eventSubListener.onChannelRewardRemove(state.broadcasterId, event => {
+        handleRewardEvent('reward.remove', event).catch(error => {
+          state.rewardsLastError = error.message
+          logger.error(`Twitch reward remove handler failed: ${error.message}`)
+        })
+      }))
+    }
+  }
+
+  function shouldBindRewardEvent(eventName) {
+    return rewardEventHandlers.some(handler => !handler.events.length || handler.events.includes(eventName))
+  }
+
+  function trackRewardSubscription(register) {
+    const subscription = register()
+    rewardSubscriptionRegistrars.set(subscription.id, register)
+    return subscription
+  }
+
+  function scheduleRewardSubscriptionRetry(subscription) {
+    if (!state.enabled || !shouldRun || !listener || !listener.isActive) return
+
+    const register = rewardSubscriptionRegistrars.get(subscription.id)
+    if (!register) return
+
+    rewardSubscriptionRetryQueue.set(subscription.id, register)
+    if (rewardRetryTimer) return
+
+    rewardRetryAttempt += 1
+    const delay = Math.min(
+      config.reconnectInitialMs * Math.pow(2, rewardRetryAttempt - 1),
+      config.reconnectMaxMs
+    )
+
+    state.rewardsRetryAttempt = rewardRetryAttempt
+    state.rewardsNextRetryAt = new Date(Date.now() + delay).toISOString()
+    logger.warn(`Retrying Twitch reward subscription in ${Math.round(delay / 1000)}s`)
+
+    rewardRetryTimer = setTimeout(() => {
+      rewardRetryTimer = null
+      retryRewardSubscriptions()
+    }, delay)
+  }
+
+  function retryRewardSubscriptions() {
+    if (!shouldRun || !listener || !listener.isActive) return
+
+    const subscriptions = [...rewardSubscriptionRetryQueue.values()]
+    rewardSubscriptionRetryQueue.clear()
+    state.rewardsNextRetryAt = null
+
+    for (const register of subscriptions) {
+      try {
+        trackRewardSubscription(register)
+      } catch (error) {
+        state.rewardsLastError = error.message
+        logger.error(`Twitch reward subscription retry failed: ${error.message}`)
+      }
+    }
+  }
+
+  function resetRewardRetry() {
+    if (rewardRetryTimer) clearTimeout(rewardRetryTimer)
+    rewardRetryTimer = null
+    rewardRetryAttempt = 0
+    state.rewardsRetryAttempt = 0
+    state.rewardsNextRetryAt = null
   }
 
   async function handleMessage(event) {
@@ -233,6 +420,31 @@ function createChatService({ actions, logger = console } = {}) {
     if (!commandMatch) return
 
     await runCommand(commandMatch, context)
+  }
+
+  async function handleRedemption(eventName, event) {
+    const context = createRedemptionContext(eventName, event)
+    const handlers = eventName === 'redemption.update' ? redemptionUpdateHandlers : redemptionHandlers
+    state.redemptionCount += 1
+    state.lastRedemptionAt = new Date().toISOString()
+    state.lastRedemption = summarizeRedemptionContext(context)
+    state.lastRedemptionMatchedHandlers = await runConfiguredHandlers(handlers, context)
+  }
+
+  async function handleAutomaticRedemption(event) {
+    const context = createAutomaticRedemptionContext(event)
+    state.redemptionCount += 1
+    state.lastRedemptionAt = new Date().toISOString()
+    state.lastRedemption = summarizeRedemptionContext(context)
+    state.lastRedemptionMatchedHandlers = await runConfiguredHandlers(automaticRedemptionHandlers, context)
+  }
+
+  async function handleRewardEvent(eventName, event) {
+    const context = createRewardEventContext(eventName, event)
+    state.rewardEventCount += 1
+    state.lastRewardEventAt = new Date().toISOString()
+    state.lastRewardEvent = summarizeRewardEventContext(context)
+    state.lastRewardEventMatchedHandlers = await runConfiguredHandlers(rewardEventHandlers, context)
   }
 
   async function runCommand(commandMatch, context) {
@@ -257,6 +469,20 @@ function createChatService({ actions, logger = console } = {}) {
     state.lastCommandAt = new Date().toISOString()
     logger.log(`Twitch command ${commandName} from ${commandContext.displayName}`)
     await actions.run(command.actions, commandContext)
+  }
+
+  async function runConfiguredHandlers(handlers, context) {
+    let matchedCount = 0
+
+    for (const handler of handlers) {
+      if (!matchesHandler(handler, context)) continue
+      if (isCoolingDown(handler, context)) continue
+      matchedCount += 1
+      logger.log(`Twitch ${context.event} action for ${context.displayName || context.reward.title}`)
+      await actions.run(handler.actions, context)
+    }
+
+    return matchedCount
   }
 
   async function runHighlightAlert(context) {
@@ -302,7 +528,9 @@ function createChatService({ actions, logger = console } = {}) {
     const seconds = Number(command.cooldownSeconds || 0)
     if (seconds <= 0) return false
 
-    const scope = command.cooldownScope === 'user' ? context.chat.chatter.id : 'global'
+    const scope = command.cooldownScope === 'user'
+      ? (context.userId || (context.chat && context.chat.chatter && context.chat.chatter.id) || 'unknown')
+      : 'global'
     const key = `${command.key}:${scope}`
     const now = Date.now()
     const availableAt = cooldowns.get(key) || 0
@@ -316,7 +544,15 @@ function createChatService({ actions, logger = console } = {}) {
     if (!fs.existsSync(config.commandsFile)) {
       commands = []
       commandMap = new Map()
+      redemptionHandlers = []
+      redemptionUpdateHandlers = []
+      automaticRedemptionHandlers = []
+      rewardEventHandlers = []
       state.commandCount = 0
+      state.redemptionHandlerCount = 0
+      state.redemptionUpdateHandlerCount = 0
+      state.automaticRedemptionHandlerCount = 0
+      state.rewardEventHandlerCount = 0
       state.commandsLastError = null
       logger.warn(`Twitch commands file not found: ${relativePath(config.commandsFile)}`)
       return
@@ -324,12 +560,13 @@ function createChatService({ actions, logger = console } = {}) {
 
     try {
       const parsed = JSON.parse(fs.readFileSync(config.commandsFile, 'utf8'))
-      if (!Array.isArray(parsed)) {
-        throw new Error('commands.json must contain an array')
-      }
-
-      const nextCommands = parsed.map(command => normalizeCommand(command, config.commandPrefix)).filter(Boolean)
+      const automationConfig = normalizeAutomationConfig(parsed)
+      const nextCommands = automationConfig.commands.map(command => normalizeCommand(command, config.commandPrefix)).filter(Boolean)
       const nextCommandMap = new Map()
+      const nextRedemptionHandlers = automationConfig.redemptions.map(handler => normalizeActionHandler(handler, 'redemption.add')).filter(Boolean)
+      const nextRedemptionUpdateHandlers = automationConfig.redemptionUpdates.map(handler => normalizeActionHandler(handler, 'redemption.update')).filter(Boolean)
+      const nextAutomaticRedemptionHandlers = automationConfig.automaticRedemptions.map(handler => normalizeActionHandler(handler, 'automatic-redemption.add')).filter(Boolean)
+      const nextRewardEventHandlers = automationConfig.rewardEvents.map(handler => normalizeActionHandler(handler)).filter(Boolean)
 
       for (const command of nextCommands) {
         for (const name of command.names) {
@@ -340,10 +577,18 @@ function createChatService({ actions, logger = console } = {}) {
 
       commands = nextCommands
       commandMap = nextCommandMap
+      redemptionHandlers = nextRedemptionHandlers
+      redemptionUpdateHandlers = nextRedemptionUpdateHandlers
+      automaticRedemptionHandlers = nextAutomaticRedemptionHandlers
+      rewardEventHandlers = nextRewardEventHandlers
       state.commandCount = commandMap.size
+      state.redemptionHandlerCount = redemptionHandlers.length
+      state.redemptionUpdateHandlerCount = redemptionUpdateHandlers.length
+      state.automaticRedemptionHandlerCount = automaticRedemptionHandlers.length
+      state.rewardEventHandlerCount = rewardEventHandlers.length
       state.commandsLoadedAt = new Date().toISOString()
       state.commandsLastError = null
-      logger.log(`Loaded ${state.commandCount} Twitch chat command${state.commandCount === 1 ? '' : 's'}`)
+      logger.log(`Loaded ${state.commandCount} Twitch chat command${state.commandCount === 1 ? '' : 's'} and ${state.redemptionHandlerCount + state.redemptionUpdateHandlerCount + state.automaticRedemptionHandlerCount + state.rewardEventHandlerCount} reward handler${state.redemptionHandlerCount + state.redemptionUpdateHandlerCount + state.automaticRedemptionHandlerCount + state.rewardEventHandlerCount === 1 ? '' : 's'}`)
     } catch (error) {
       state.commandsLastError = error.message
       logger.error(`Failed to load Twitch commands from ${relativePath(config.commandsFile)}: ${error.message}`)
@@ -386,14 +631,76 @@ function createChatService({ actions, logger = console } = {}) {
 async function createAuthProvider(twurple, config, logger) {
   if (!config.clientId) throw new Error('TWITCH_CLIENT_ID is required when CHAT_ENABLED=true')
 
-  const token = readTokenConfig(config.tokenFile)
-  const accessToken = cleanAccessToken(token.accessToken || config.botAccessToken)
-  const refreshToken = token.refreshToken || config.botRefreshToken
-  const expiresIn = token.expiresIn || config.botExpiresIn
-  const obtainmentTimestamp = token.obtainmentTimestamp || config.botObtainmentTimestamp
-  const scope = token.scope || config.botScopes
+  const botToken = readTokenConfig(config.tokenFile)
+  const botAccessToken = cleanAccessToken(botToken.accessToken || config.botAccessToken)
+  const botRefreshToken = botToken.refreshToken || config.botRefreshToken
+  const botExpiresIn = botToken.expiresIn || config.botExpiresIn
+  const botObtainmentTimestamp = botToken.obtainmentTimestamp || config.botObtainmentTimestamp
+  const botScope = botToken.scope || config.botScopes
 
-  if (refreshToken) {
+  if (config.enableRedemptions) {
+    if (!config.clientSecret) {
+      throw new Error('TWITCH_CLIENT_SECRET is required when CHAT_ENABLE_REDEMPTIONS=true')
+    }
+
+    if (!botRefreshToken) {
+      throw new Error('TWITCH_BOT_REFRESH_TOKEN is required when CHAT_ENABLE_REDEMPTIONS=true')
+    }
+
+    const broadcasterToken = readTokenConfig(config.broadcasterTokenFile)
+    const broadcasterAccessToken = cleanAccessToken(broadcasterToken.accessToken || config.broadcasterAccessToken)
+    const broadcasterRefreshToken = broadcasterToken.refreshToken || config.broadcasterRefreshToken
+    const broadcasterExpiresIn = broadcasterToken.expiresIn || config.broadcasterExpiresIn
+    const broadcasterObtainmentTimestamp = broadcasterToken.obtainmentTimestamp || config.broadcasterObtainmentTimestamp
+    const broadcasterScope = broadcasterToken.scope || config.broadcasterScopes
+
+    if (!broadcasterRefreshToken) {
+      throw new Error('TWITCH_BROADCASTER_REFRESH_TOKEN is required when CHAT_ENABLE_REDEMPTIONS=true')
+    }
+
+    const authProvider = new twurple.RefreshingAuthProvider({
+      clientId: config.clientId,
+      clientSecret: config.clientSecret
+    })
+
+    const tokenFilesByUserId = new Map()
+    let refreshTokenFile = config.tokenFile
+
+    authProvider.onRefresh((userId, refreshedToken) => {
+      persistToken(tokenFilesByUserId.get(userId) || refreshTokenFile, userId, refreshedToken, logger)
+    })
+
+    authProvider.onRefreshFailure((userId, error) => {
+      logger.error(`Twitch token refresh failed for ${userId}: ${error.message}`)
+    })
+
+    refreshTokenFile = config.tokenFile
+    const botUserId = await authProvider.addUserForToken(buildRefreshingToken({
+      accessToken: botAccessToken,
+      expiresIn: botExpiresIn,
+      obtainmentTimestamp: botObtainmentTimestamp,
+      refreshToken: botRefreshToken,
+      scope: botScope
+    }), [CHAT_INTENT])
+    tokenFilesByUserId.set(botUserId, config.tokenFile)
+
+    refreshTokenFile = config.broadcasterTokenFile
+    const broadcasterUserId = await authProvider.addUserForToken(buildRefreshingToken({
+      accessToken: broadcasterAccessToken,
+      expiresIn: broadcasterExpiresIn,
+      obtainmentTimestamp: broadcasterObtainmentTimestamp,
+      refreshToken: broadcasterRefreshToken,
+      scope: broadcasterScope
+    }), [REDEMPTION_INTENT])
+    tokenFilesByUserId.set(broadcasterUserId, config.broadcasterTokenFile)
+
+    warnMissingScopes(authProvider.getCurrentScopesForUser(botUserId), REQUIRED_SCOPES, logger)
+    warnMissingAnyScope(authProvider.getCurrentScopesForUser(broadcasterUserId), REDEMPTION_SCOPES, logger, 'Twitch broadcaster')
+
+    return { authProvider, botUserId, broadcasterUserId, mode: 'refreshing' }
+  }
+
+  if (botRefreshToken) {
     if (!config.clientSecret) {
       throw new Error('TWITCH_CLIENT_SECRET is required when using TWITCH_BOT_REFRESH_TOKEN')
     }
@@ -411,25 +718,25 @@ async function createAuthProvider(twurple, config, logger) {
       logger.error(`Twitch token refresh failed for ${userId}: ${error.message}`)
     })
 
-    const botUserId = await authProvider.addUserForToken({
-      accessToken: expiresIn !== undefined && obtainmentTimestamp !== undefined ? accessToken : undefined,
-      refreshToken,
-      expiresIn,
-      obtainmentTimestamp,
-      scope
-    }, [CHAT_INTENT])
+    const botUserId = await authProvider.addUserForToken(buildRefreshingToken({
+      accessToken: botAccessToken,
+      expiresIn: botExpiresIn,
+      obtainmentTimestamp: botObtainmentTimestamp,
+      refreshToken: botRefreshToken,
+      scope: botScope
+    }), [CHAT_INTENT])
 
     warnMissingScopes(authProvider.getCurrentScopesForUser(botUserId), REQUIRED_SCOPES, logger)
 
     return { authProvider, botUserId, mode: 'refreshing' }
   }
 
-  if (!accessToken) {
+  if (!botAccessToken) {
     throw new Error('TWITCH_BOT_ACCESS_TOKEN and TWITCH_BOT_REFRESH_TOKEN are required when CHAT_ENABLED=true')
   }
 
-  const authProvider = new twurple.StaticAuthProvider(config.clientId, accessToken)
-  const tokenInfo = await twurple.getTokenInfo(accessToken)
+  const authProvider = new twurple.StaticAuthProvider(config.clientId, botAccessToken)
+  const tokenInfo = await twurple.getTokenInfo(botAccessToken)
   const botUserId = config.botUserId || tokenInfo.userId
   if (!botUserId) throw new Error('Unable to determine Twitch bot user ID from token')
 
@@ -503,6 +810,130 @@ function createMessageContext(event, state) {
   }
 }
 
+function createRedemptionContext(eventName, event) {
+  const input = event.input || ''
+  const redeemedAt = dateToIso(event.redemptionDate)
+
+  return {
+    broadcaster: event.broadcasterName,
+    broadcasterDisplayName: event.broadcasterDisplayName,
+    broadcasterId: event.broadcasterId,
+    displayName: event.userDisplayName,
+    event: eventName,
+    input,
+    message: input,
+    redemption: {
+      id: event.id,
+      input,
+      redeemedAt,
+      rewardId: event.rewardId,
+      status: event.status
+    },
+    reward: {
+      cost: event.rewardCost,
+      id: event.rewardId,
+      prompt: event.rewardPrompt,
+      title: event.rewardTitle
+    },
+    source: 'redemption',
+    user: event.userName,
+    userId: event.userId,
+    username: event.userName
+  }
+}
+
+function createAutomaticRedemptionContext(event) {
+  const reward = event.reward
+  const message = event.messageText || ''
+  const redeemedAt = dateToIso(event.redemptionDate)
+
+  return {
+    automaticReward: {
+      channelPoints: reward.channelPoints,
+      emote: reward.emote,
+      type: reward.type
+    },
+    broadcaster: event.broadcasterName,
+    broadcasterDisplayName: event.broadcasterDisplayName,
+    broadcasterId: event.broadcasterId,
+    displayName: event.userDisplayName,
+    event: 'automatic-redemption.add',
+    input: message,
+    message,
+    redemption: {
+      id: event.id,
+      input: message,
+      redeemedAt,
+      rewardType: reward.type,
+      status: 'fulfilled'
+    },
+    reward: {
+      cost: reward.channelPoints,
+      id: reward.type,
+      prompt: '',
+      title: reward.type,
+      type: reward.type
+    },
+    source: 'automatic-redemption',
+    user: event.userName,
+    userId: event.userId,
+    username: event.userName
+  }
+}
+
+function createRewardEventContext(eventName, event) {
+  return {
+    broadcaster: event.broadcasterName,
+    broadcasterDisplayName: event.broadcasterDisplayName,
+    broadcasterId: event.broadcasterId,
+    displayName: event.broadcasterDisplayName,
+    event: eventName,
+    message: event.title,
+    reward: {
+      autoApproved: event.autoApproved,
+      backgroundColor: event.backgroundColor,
+      cost: event.cost,
+      globalCooldown: event.globalCooldown,
+      id: event.id,
+      isEnabled: event.isEnabled,
+      isInStock: event.isInStock,
+      isPaused: event.isPaused,
+      maxRedemptionsPerStream: event.maxRedemptionsPerStream,
+      maxRedemptionsPerUserPerStream: event.maxRedemptionsPerUserPerStream,
+      prompt: event.prompt,
+      redemptionsThisStream: event.redemptionsThisStream,
+      title: event.title,
+      userInputRequired: event.userInputRequired
+    },
+    source: 'reward',
+    user: event.broadcasterName,
+    userId: event.broadcasterId,
+    username: event.broadcasterName
+  }
+}
+
+function summarizeRedemptionContext(context) {
+  return {
+    automaticReward: context.automaticReward || null,
+    displayName: context.displayName,
+    event: context.event,
+    input: context.input || '',
+    redeemedAt: context.redemption && context.redemption.redeemedAt,
+    redemptionId: context.redemption && context.redemption.id,
+    reward: context.reward,
+    status: context.redemption && context.redemption.status,
+    user: context.user,
+    userId: context.userId
+  }
+}
+
+function summarizeRewardEventContext(context) {
+  return {
+    event: context.event,
+    reward: context.reward
+  }
+}
+
 function getRoles({ badges, broadcasterId, chatterId }) {
   const roles = new Set(['everyone'])
 
@@ -531,11 +962,78 @@ function isHighlightMessage(context, config) {
   return Boolean(config.highlightRewardId && context.chat.rewardId === config.highlightRewardId)
 }
 
+function isRewardSubscription(subscription) {
+  return String(subscription.id || '').startsWith('channel.channel_points_')
+}
+
+function matchesHandler(handler, context) {
+  if (handler.events.length && !handler.events.includes(context.event)) return false
+
+  const rewardId = normalizeMatchValue(context.reward && context.reward.id)
+  const rewardTitle = normalizeMatchValue(context.reward && context.reward.title)
+  const rewardType = normalizeMatchValue(
+    (context.automaticReward && context.automaticReward.type) ||
+    (context.reward && context.reward.type)
+  )
+  const status = normalizeMatchValue(context.redemption && context.redemption.status)
+  const userId = normalizeMatchValue(context.userId)
+  const username = normalizeMatchValue(context.username || context.user)
+  const displayName = normalizeMatchValue(context.displayName)
+  const input = normalizeMatchValue(context.input || context.message)
+
+  if (handler.rewardIds.length && !handler.rewardIds.includes(rewardId)) return false
+  if (handler.rewardTitles.length && !handler.rewardTitles.includes(rewardTitle)) return false
+  if (handler.rewardTypes.length && !handler.rewardTypes.includes(rewardType)) return false
+  if (handler.statuses.length && !handler.statuses.includes(status)) return false
+  if (handler.userIds.length && !handler.userIds.includes(userId)) return false
+  if (handler.usernames.length && !handler.usernames.includes(username) && !handler.usernames.includes(displayName)) return false
+  if (handler.inputContains.length && !handler.inputContains.some(value => input.includes(value))) return false
+  if (handler.inputPatterns.length && !handler.inputPatterns.some(pattern => testRegex(pattern, context.input || context.message || ''))) return false
+
+  return true
+}
+
+function testRegex(pattern, value) {
+  pattern.lastIndex = 0
+  return pattern.test(value)
+}
+
 function warnMissingScopes(actualScopes, requiredScopes, logger) {
   const actual = new Set(actualScopes || [])
   const missing = requiredScopes.filter(scope => !actual.has(scope))
   if (missing.length) {
     logger.warn(`Twitch bot token is missing recommended scope${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`)
+  }
+}
+
+function warnMissingAnyScope(actualScopes, acceptedScopes, logger, label) {
+  const actual = new Set(actualScopes || [])
+  if (!acceptedScopes.some(scope => actual.has(scope))) {
+    logger.warn(`${label} token is missing one of these scopes: ${acceptedScopes.join(', ')}`)
+  }
+}
+
+function normalizeAutomationConfig(parsed) {
+  if (Array.isArray(parsed)) {
+    return {
+      automaticRedemptions: [],
+      commands: parsed,
+      redemptions: [],
+      redemptionUpdates: [],
+      rewardEvents: []
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('commands.json must contain an array or an object')
+  }
+
+  return {
+    automaticRedemptions: asArray(parsed.automaticRedemptions || parsed.automaticRewards),
+    commands: asArray(parsed.commands),
+    redemptions: asArray(parsed.redemptions || parsed.rewardRedemptions),
+    redemptionUpdates: asArray(parsed.redemptionUpdates),
+    rewardEvents: asArray(parsed.rewardEvents)
   }
 }
 
@@ -560,6 +1058,52 @@ function normalizeCommand(command, commandPrefix) {
   }
 }
 
+function normalizeActionHandler(handler, defaultEvent) {
+  if (!handler || typeof handler !== 'object' || handler.enabled === false) return null
+  if (!handler.actions) return null
+
+  const match = handler.match && typeof handler.match === 'object' ? handler.match : {}
+  const events = normalizeEventList(match.event || match.events || handler.event || handler.events || defaultEvent)
+  const rewardIds = normalizeMatchList(match.rewardId || match.rewardIds || handler.rewardId || handler.rewardIds || handler.id)
+  const rewardTitles = normalizeMatchList(match.rewardTitle || match.rewardTitles || match.title || match.titles || handler.rewardTitle || handler.rewardTitles || handler.title)
+  const rewardTypes = normalizeMatchList(match.rewardType || match.rewardTypes || match.type || match.types || handler.rewardType || handler.rewardTypes || handler.type)
+  const statuses = normalizeMatchList(match.status || match.statuses || handler.status || handler.statuses)
+  const userIds = normalizeMatchList(match.userId || match.userIds || handler.userId || handler.userIds)
+  const usernames = normalizeMatchList(match.username || match.usernames || match.userName || match.userNames || match.displayName || match.displayNames || handler.username || handler.usernames || handler.userName || handler.userNames || handler.displayName || handler.displayNames)
+  const inputContains = normalizeMatchList(match.inputContains || match.messageContains || handler.inputContains || handler.messageContains)
+  const inputPatterns = normalizeRegexList(match.inputMatches || match.messageMatches || match.inputPattern || handler.inputMatches || handler.messageMatches || handler.inputPattern)
+  const name = normalizeMatchValue(match.name || handler.name)
+  const keyParts = [
+    events.join(',') || defaultEvent || 'reward',
+    name,
+    rewardIds.join(','),
+    rewardTitles.join(','),
+    rewardTypes.join(','),
+    statuses.join(','),
+    userIds.join(','),
+    usernames.join(','),
+    inputContains.join(','),
+    inputPatterns.map(pattern => pattern.source).join(',')
+  ].filter(Boolean)
+
+  return {
+    actions: handler.actions,
+    cooldownScope: handler.cooldownScope === 'user' ? 'user' : 'global',
+    cooldownSeconds: Number(handler.cooldownSeconds || 0),
+    events,
+    key: keyParts.join(':'),
+    inputContains,
+    inputPatterns,
+    name,
+    rewardIds,
+    rewardTitles,
+    rewardTypes,
+    statuses,
+    userIds,
+    usernames
+  }
+}
+
 function normalizeCommandName(name, commandPrefix) {
   const normalized = String(name || '').trim().toLowerCase()
   if (!normalized) return null
@@ -570,6 +1114,53 @@ function normalizeCommandName(name, commandPrefix) {
 function normalizeRoles(roles) {
   if (!Array.isArray(roles)) return []
   return roles.map(normalizeRole).filter(Boolean)
+}
+
+function normalizeMatchList(value) {
+  return asArray(value).map(normalizeMatchValue).filter(Boolean)
+}
+
+function normalizeMatchValue(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function normalizeRegexList(value) {
+  return asArray(value).map(normalizeRegex).filter(Boolean)
+}
+
+function normalizeRegex(value) {
+  if (value instanceof RegExp) return value
+
+  const text = String(value || '').trim()
+  if (!text) return null
+
+  try {
+    const match = text.match(/^\/(.+)\/([dgimsuvy]*)$/)
+    if (match) return new RegExp(match[1], match[2])
+    return new RegExp(text, 'i')
+  } catch (error) {
+    throw new Error(`Invalid redemption input pattern "${text}": ${error.message}`)
+  }
+}
+
+function normalizeEventList(value) {
+  return asArray(value).map(normalizeEventName).filter(Boolean)
+}
+
+function normalizeEventName(value) {
+  const normalized = normalizeMatchValue(value).replace(/_/g, '.')
+  const aliases = {
+    add: 'reward.add',
+    automatic: 'automatic-redemption.add',
+    automaticRedemption: 'automatic-redemption.add',
+    automaticredemption: 'automatic-redemption.add',
+    redemption: 'redemption.add',
+    redeemed: 'redemption.add',
+    remove: 'reward.remove',
+    update: 'reward.update'
+  }
+
+  return aliases[normalized] || normalized
 }
 
 function normalizeRole(role) {
@@ -586,6 +1177,11 @@ function normalizeRole(role) {
   return aliases[normalized] || normalized
 }
 
+function asArray(value) {
+  if (value === undefined || value === null || value === '') return []
+  return Array.isArray(value) ? value : [value]
+}
+
 function readConfig() {
   const broadcasterLogin = process.env.TWITCH_CHANNEL || process.env.TWITCH_BROADCASTER_LOGIN
   const broadcasterId = process.env.TWITCH_CHANNEL_ID || process.env.TWITCH_BROADCASTER_ID
@@ -598,14 +1194,21 @@ function readConfig() {
     botScopes: parseScopes(process.env.TWITCH_BOT_SCOPES),
     botUserId: process.env.TWITCH_BOT_USER_ID,
     botUsername: process.env.TWITCH_BOT_USERNAME,
+    broadcasterAccessToken: process.env.TWITCH_BROADCASTER_ACCESS_TOKEN,
+    broadcasterExpiresIn: numberOrUndefined(process.env.TWITCH_BROADCASTER_EXPIRES_IN),
     broadcasterId,
     broadcasterLogin: normalizeLogin(broadcasterLogin),
+    broadcasterObtainmentTimestamp: numberOrUndefined(process.env.TWITCH_BROADCASTER_OBTAINMENT_TIMESTAMP),
+    broadcasterRefreshToken: process.env.TWITCH_BROADCASTER_REFRESH_TOKEN,
+    broadcasterScopes: parseScopes(process.env.TWITCH_BROADCASTER_SCOPES),
+    broadcasterTokenFile: resolveAppPath(process.env.TWITCH_BROADCASTER_TOKEN_FILE, DEFAULT_BROADCASTER_TOKEN_FILE),
     clientId: process.env.TWITCH_CLIENT_ID,
     clientSecret: process.env.TWITCH_CLIENT_SECRET,
     commandPrefix: process.env.CHAT_COMMAND_PREFIX || DEFAULT_COMMAND_PREFIX,
     commandsFile: resolveAppPath(process.env.CHAT_COMMANDS_FILE, DEFAULT_COMMANDS_FILE),
     defaultAlertSound: process.env.DEFAULT_ALERT_SOUND || 'kitt_scanner.mp3',
     enableHighlightAlerts: parseBool(process.env.CHAT_ENABLE_HIGHLIGHT_ALERTS, false),
+    enableRedemptions: parseBool(process.env.CHAT_ENABLE_REDEMPTIONS, Boolean(process.env.TWITCH_BROADCASTER_REFRESH_TOKEN)),
     enabled: parseBool(process.env.CHAT_ENABLED, false),
     highlightRewardId: process.env.TWITCH_HIGHLIGHT_REWARD_ID || '',
     ignoreSelf: parseBool(process.env.CHAT_IGNORE_SELF, true),
@@ -625,6 +1228,16 @@ function readTokenConfig(tokenFile) {
     obtainmentTimestamp: numberOrUndefined(data.obtainmentTimestamp || data.obtainment_timestamp),
     refreshToken: data.refreshToken || data.refresh_token,
     scope: parseScopes(data.scope || data.scopes)
+  }
+}
+
+function buildRefreshingToken({ accessToken, expiresIn, obtainmentTimestamp, refreshToken, scope }) {
+  return {
+    accessToken: expiresIn !== undefined && obtainmentTimestamp !== undefined ? accessToken : undefined,
+    expiresIn,
+    obtainmentTimestamp,
+    refreshToken,
+    scope
   }
 }
 
@@ -688,6 +1301,12 @@ function numberOrDefault(value, defaultValue) {
   return Number.isFinite(number) && number > 0 ? number : defaultValue
 }
 
+function dateToIso(value) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
 async function loadTwurple() {
   if (twurpleModules) return twurpleModules
 
@@ -710,5 +1329,6 @@ async function loadTwurple() {
 
 module.exports = {
   createChatService,
+  REDEMPTION_SCOPES,
   REQUIRED_SCOPES
 }

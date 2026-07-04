@@ -1,3 +1,6 @@
 {
-  "ext": "js,mjs,cjs,json,ejs,css"
+  "ext": "js,mjs,cjs,json,ejs,css",
+  "ignore": [
+    "config/*"
+  ]
 }
