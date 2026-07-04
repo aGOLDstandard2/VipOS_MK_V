@@ -11,8 +11,7 @@ function validateSoundSrc(src) {
 
   const normalized = src.trim()
   if (!normalized) return null
-  if (normalized.includes('..') || normalized.includes('/') || normalized.includes('\\')) return null
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i.test(normalized)) return null
+  if (!/^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i.test(normalized)) return null
 
   return normalized
 }
@@ -75,7 +74,7 @@ function createActionRunner({ io, obs, logger = console }) {
       case 'sound.play': {
         const src = validateSoundSrc(hydrate(action.src || action.path, context))
         if (!src) {
-          throw userInputError('sound.play requires a local sound filename ending in .mp3, .ogg, or .wav')
+          throw userInputError('sound.play requires a local sound path ending in .mp3, .ogg, or .wav')
         }
         const volume = clamp(Number(action.volume ?? 1), 0, 1)
         io.emit('sound-play', { src, volume })

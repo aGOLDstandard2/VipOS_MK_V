@@ -233,7 +233,7 @@ app.post('/api/v1/sound', asyncHandler(async (req, res) => {
   const soundSrc = validateSoundSrc(src)
   if (!soundSrc) {
     return res.status(400).json({
-      error: 'src must be a local sound filename ending in .mp3, .ogg, or .wav'
+      error: 'src must be a local sound path ending in .mp3, .ogg, or .wav'
     })
   }
 
