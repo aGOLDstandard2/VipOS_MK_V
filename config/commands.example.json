@@ -38,7 +38,9 @@
       "roles": ["broadcaster", "mod"],
       "cooldownSeconds": 5,
       "actions": [
-        { "type": "sound.play", "src": "example.mp3", "volume": 0.8 }
+        { "type": "sound.pickRandom", "contextKey": "sfx" },
+        { "type": "overlay.alert", "message": "{sfx.text}" },
+        { "type": "sound.play", "src": "{sfx.src}", "volume": 0.8 }
       ]
     },
     {
@@ -73,6 +75,17 @@
       },
       "actions": [
         { "type": "overlay.alert", "message": "{displayName} requested: {redemption.input}" }
+      ]
+    },
+    {
+      "name": "sfx-random",
+      "match": {
+        "rewardTitle": "SFX // RANDOM"
+      },
+      "actions": [
+        { "type": "sound.pickRandom", "contextKey": "sfx" },
+        { "type": "overlay.alert", "message": "{sfx.text}" },
+        { "type": "sound.play", "src": "{sfx.src}", "volume": 1 }
       ]
     }
   ]

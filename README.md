@@ -45,6 +45,7 @@ bits:read channel:read:redemptions channel:manage:redemptions channel:read:polls
 - `rewardEvents`
 
 Reward action templates can use values like `{displayName}`, `{message}`, `{reward.title}`, `{reward.id}`, `{reward.cost}`, `{redemption.input}`, and `{automaticReward.type}`.
+`sound.pickRandom` adds the picked file to the action context, so later actions can use `{sfx.src}`, `{sfx.filename}`, `{sfx.name}`, and `{sfx.text}` when the `contextKey` is `sfx`.
 
 For normal channel point usage, use `redemptions`; Twitch calls this event `redemption.add` because a viewer has added a new redemption. `redemptionUpdates`, `automaticRedemptions`, and `rewardEvents` are optional advanced handler groups, and the service only subscribes to those extra EventSub topics when handlers are configured for them at startup.
 
@@ -84,6 +85,7 @@ Action types currently supported:
 - `overlay.alert`
 - `overlay.emit`
 - `sound.play`
+- `sound.pickRandom`
 - `obs.scene`
 - `obs.source`
 - `obs.mute`
@@ -91,3 +93,5 @@ Action types currently supported:
 - `chat.say`
 - `delay`
 - `log`
+
+`sound.pickRandom` chooses from top-level `.mp3`, `.ogg`, and `.wav` files in `public/assets/sounds`; subdirectories are ignored. Edit `config/sfx-text.json` to control the overlay text for each filename.

@@ -1,3 +1,11 @@
+const fs = require('fs')
+const path = require('path')
+
+const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', 'sounds')
+const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.json')
+const SOUND_FILE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
+const SOUND_PATH_PATTERN = /^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
+
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 function userInputError(message) {
@@ -11,12 +19,18 @@ function validateSoundSrc(src) {
 
   const normalized = src.trim()
   if (!normalized) return null
-  if (!/^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i.test(normalized)) return null
+  if (!SOUND_PATH_PATTERN.test(normalized)) return null
 
   return normalized
 }
 
-function createActionRunner({ io, obs, logger = console }) {
+function createActionRunner({
+  io,
+  obs,
+  logger = console,
+  soundDirectory = DEFAULT_SOUND_DIRECTORY,
+  soundTextFile = DEFAULT_SOUND_TEXT_FILE
+}) {
   let chatService = null
 
   function setChatService(service) {
@@ -79,6 +93,22 @@ function createActionRunner({ io, obs, logger = console }) {
         const volume = clamp(Number(action.volume ?? 1), 0, 1)
         io.emit('sound-play', { src, volume })
         return { type, src, volume }
+      }
+
+      case 'sound.pickRandom': {
+        const contextKey = hydrate(action.contextKey || action.key || 'sfx', context)
+        if (!isSafeContextPath(contextKey)) {
+          throw userInputError('sound.pickRandom requires a safe contextKey')
+        }
+
+        const textMap = {
+          ...loadSoundTextMap(soundTextFile, logger),
+          ...normalizeSoundTextMap(action.textMap || action.messages || action.labels)
+        }
+        const pickedSound = pickRandomSound({ soundDirectory, textMap })
+        setPath(context, contextKey, pickedSound)
+
+        return { type, contextKey, ...pickedSound }
       }
 
       case 'chat.say': {
@@ -168,6 +198,77 @@ function getPath(source, path) {
     if (current === undefined || current === null) return undefined
     return current[key]
   }, source)
+}
+
+function setPath(target, pathValue, value) {
+  const keys = pathValue.split('.')
+  const lastKey = keys.pop()
+  const parent = keys.reduce((current, key) => {
+    if (!current[key] || typeof current[key] !== 'object') current[key] = {}
+    return current[key]
+  }, target)
+  parent[lastKey] = value
+}
+
+function isSafeContextPath(pathValue) {
+  const unsafeKeys = new Set(['__proto__', 'constructor', 'prototype'])
+  const keys = String(pathValue || '').split('.')
+  return keys.every(key => /^[a-zA-Z][a-zA-Z0-9_]*$/.test(key) && !unsafeKeys.has(key))
+}
+
+function loadSoundTextMap(file, logger = console) {
+  if (!file || !fs.existsSync(file)) return {}
+
+  try {
+    return normalizeSoundTextMap(JSON.parse(fs.readFileSync(file, 'utf8')))
+  } catch (error) {
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(`Failed to load sound text map ${file}: ${error.message}`)
+    }
+    return {}
+  }
+}
+
+function normalizeSoundTextMap(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+  return Object.fromEntries(Object.entries(value)
+    .filter(([filename, text]) => SOUND_FILE_PATTERN.test(filename) && text !== undefined && text !== null)
+    .map(([filename, text]) => [filename, String(text)]))
+}
+
+function pickRandomSound({ soundDirectory, textMap = {} }) {
+  let entries
+
+  try {
+    entries = fs.readdirSync(soundDirectory, { withFileTypes: true })
+  } catch (error) {
+    throw userInputError('sound.pickRandom could not read the local sound directory')
+  }
+
+  const filenames = entries
+    .filter(entry => entry.isFile() && SOUND_FILE_PATTERN.test(entry.name))
+    .map(entry => entry.name)
+
+  if (!filenames.length) {
+    throw userInputError('sound.pickRandom found no local sound files ending in .mp3, .ogg, or .wav')
+  }
+
+  const src = filenames[Math.floor(Math.random() * filenames.length)]
+  const name = path.basename(src, path.extname(src))
+
+  return {
+    filename: src,
+    name,
+    src,
+    text: getSoundText(src, textMap)
+  }
+}
+
+function getSoundText(src, textMap) {
+  const mappedText = textMap[src]
+  if (mappedText !== undefined && mappedText !== null && String(mappedText).trim()) return String(mappedText)
+  return path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim()
 }
 
 function parseToggle(value) {

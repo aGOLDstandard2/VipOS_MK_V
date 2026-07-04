@@ -4,5 +4,6 @@ config/auth_notes.txt
 config/commands.json
 config/twitch-broadcaster-token.json
 config/twitch-token.json
+config/sfx-text.json
 config/*.tmp
 node_modules/*
