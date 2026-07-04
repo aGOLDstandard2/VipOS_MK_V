@@ -43,11 +43,17 @@ bits:read channel:read:redemptions channel:manage:redemptions channel:read:polls
 - `redemptionUpdates`
 - `automaticRedemptions`
 - `rewardEvents`
+- `follows`
+- `raids`
 
 Reward action templates can use values like `{displayName}`, `{message}`, `{reward.title}`, `{reward.id}`, `{reward.cost}`, `{redemption.input}`, and `{automaticReward.type}`.
 `sound.pickRandom` adds the picked file to the action context, so later actions can use `{sfx.src}`, `{sfx.filename}`, `{sfx.name}`, and `{sfx.text}` when the `contextKey` is `sfx`.
 
 For normal channel point usage, use `redemptions`; Twitch calls this event `redemption.add` because a viewer has added a new redemption. `redemptionUpdates`, `automaticRedemptions`, and `rewardEvents` are optional advanced handler groups, and the service only subscribes to those extra EventSub topics when handlers are configured for them at startup.
+
+Follow and raid interactions are configured with `follows` and `raids`. Follow handlers require the broadcaster token to include `moderator:read:followers`; raid handlers do not require an extra Twitch scope. The service only subscribes to these EventSub topics when handlers are configured at startup.
+
+Follow templates can use `{displayName}`, `{username}`, `{follow.followedAt}`, and broadcaster fields like `{broadcasterDisplayName}`. Raid templates can use `{displayName}`, `{username}`, `{raid.viewers}`, `{raid.fromBroadcasterName}`, and `{raid.toBroadcasterName}`.
 
 Redemption handlers can be catch-all, or they can include a `match` object:
 
@@ -78,6 +84,7 @@ Redemption handlers can be catch-all, or they can include a `match` object:
 ```
 
 Supported `match` fields include `event`, `rewardId`, `rewardTitle`, `rewardType`, `status`, `userId`, `username`, `displayName`, `inputContains`, and `inputMatches`.
+Raid handlers also support `minViewers` and `maxViewers`.
 
 Use `status` only when you intentionally want to separate queued/manual reward states like `unfulfilled`, `fulfilled`, or `canceled`.
 

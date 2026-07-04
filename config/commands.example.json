@@ -88,5 +88,35 @@
         { "type": "sound.play", "src": "{sfx.src}", "volume": 1 }
       ]
     }
+  ],
+  "follows": [
+    {
+      "name": "new-follower",
+      "cooldownScope": "user",
+      "cooldownSeconds": 10,
+      "actions": [
+        { "type": "overlay.alert", "message": "Welcome in, {displayName}! Thanks for the follow." },
+        { "type": "chat.say", "message": "Welcome in, {displayName}! Thanks for following." }
+      ]
+    }
+  ],
+  "raids": [
+    {
+      "name": "incoming-raid",
+      "actions": [
+        { "type": "overlay.alert", "message": "{displayName} raided with {raid.viewers} viewers!" },
+        { "type": "chat.say", "message": "Huge welcome to {displayName}'s crew. Thanks for the raid!" }
+      ]
+    },
+    {
+      "name": "big-raid",
+      "match": {
+        "minViewers": 25
+      },
+      "actions": [
+        { "type": "overlay.alert", "message": "BIG RAID: {displayName} brought {raid.viewers} viewers!" },
+        { "type": "sound.play", "src": "kitt_scanner.mp3", "volume": 1 }
+      ]
+    }
   ]
 }

@@ -7,3 +7,4 @@ config/twitch-token.json
 config/sfx-text.json
 config/*.tmp
 node_modules/*
+TO-DO.md

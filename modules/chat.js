@@ -2,15 +2,16 @@ const fs = require('fs')
 const path = require('path')
 
 const CHAT_INTENT = 'chat'
-const REDEMPTION_INTENT = 'redemptions'
+const BROADCASTER_INTENT = 'broadcaster'
 const DEFAULT_COMMAND_PREFIX = '!'
 const DEFAULT_TOKEN_FILE = path.join(__dirname, '..', 'config', 'twitch-token.json')
 const DEFAULT_BROADCASTER_TOKEN_FILE = path.join(__dirname, '..', 'config', 'twitch-broadcaster-token.json')
 const DEFAULT_COMMANDS_FILE = path.join(__dirname, '..', 'config', 'commands.json')
 const DEFAULT_RECONNECT_INITIAL_MS = 5000
 const DEFAULT_RECONNECT_MAX_MS = 60000
-const REQUIRED_SCOPES = ['user:read:chat', 'user:write:chat']
+const CHAT_SCOPES = ['user:read:chat', 'user:write:chat']
 const REDEMPTION_SCOPES = ['channel:read:redemptions', 'channel:manage:redemptions']
+const FOLLOW_SCOPES = ['moderator:read:followers']
 
 let twurpleModules = null
 
@@ -26,7 +27,9 @@ function createChatService({ actions, logger = console } = {}) {
   let commandMap = new Map()
   let commandWatcherStarted = false
   let commands = []
+  let followHandlers = []
   let listener = null
+  let raidHandlers = []
   let redemptionHandlers = []
   let redemptionUpdateHandlers = []
   let rewardRetryAttempt = 0
@@ -56,7 +59,13 @@ function createChatService({ actions, logger = console } = {}) {
     commandsLastError: null,
     commandsPath: relativePath(config.commandsFile),
     automaticRedemptionHandlerCount: 0,
+    communityEventCount: 0,
+    communityEventHandlerCount: 0,
+    followHandlerCount: 0,
     lastCommandAt: null,
+    lastCommunityEvent: null,
+    lastCommunityEventAt: null,
+    lastCommunityEventMatchedHandlers: 0,
     lastError: null,
     lastMessageAt: null,
     lastRedemption: null,
@@ -67,6 +76,7 @@ function createChatService({ actions, logger = console } = {}) {
     lastRewardEventMatchedHandlers: 0,
     messageCount: 0,
     nextRetryAt: null,
+    raidHandlerCount: 0,
     redemptionCount: 0,
     redemptionHandlerCount: 0,
     redemptionUpdateHandlerCount: 0,
@@ -95,7 +105,10 @@ function createChatService({ actions, logger = console } = {}) {
       await loadCommands()
 
       const twurple = await loadTwurple()
-      const auth = await createAuthProvider(twurple, config, logger)
+      const auth = await createAuthProvider(twurple, config, logger, {
+        needsBroadcasterToken: config.enableRedemptions || followHandlers.length > 0 || raidHandlers.length > 0,
+        needsFollowScopes: followHandlers.length > 0
+      })
       authProvider = auth.authProvider
       state.authMode = auth.mode
       state.botUserId = auth.botUserId
@@ -126,6 +139,7 @@ function createChatService({ actions, logger = console } = {}) {
         })
       })
       bindRewardSubscriptions(listener)
+      bindCommunitySubscriptions(listener)
 
       listener.start()
       if (!shouldRun) {
@@ -345,6 +359,31 @@ function createChatService({ actions, logger = console } = {}) {
     }
   }
 
+  function bindCommunitySubscriptions(eventSubListener) {
+    if (followHandlers.length) {
+      if (!state.broadcasterAuthUserId) {
+        state.lastError = 'Broadcaster token is required for Twitch follow events'
+        logger.warn(state.lastError)
+      } else {
+        eventSubListener.onChannelFollow(state.broadcasterId, state.broadcasterAuthUserId, event => {
+          handleFollow(event).catch(error => {
+            state.lastError = error.message
+            logger.error(`Twitch follow handler failed: ${error.message}`)
+          })
+        })
+      }
+    }
+
+    if (raidHandlers.length) {
+      eventSubListener.onChannelRaidTo(state.broadcasterId, event => {
+        handleRaid(event).catch(error => {
+          state.lastError = error.message
+          logger.error(`Twitch raid handler failed: ${error.message}`)
+        })
+      })
+    }
+  }
+
   function shouldBindRewardEvent(eventName) {
     return rewardEventHandlers.some(handler => !handler.events.length || handler.events.includes(eventName))
   }
@@ -447,6 +486,22 @@ function createChatService({ actions, logger = console } = {}) {
     state.lastRewardEventMatchedHandlers = await runConfiguredHandlers(rewardEventHandlers, context)
   }
 
+  async function handleFollow(event) {
+    const context = createFollowContext(event)
+    state.communityEventCount += 1
+    state.lastCommunityEventAt = new Date().toISOString()
+    state.lastCommunityEvent = summarizeCommunityEventContext(context)
+    state.lastCommunityEventMatchedHandlers = await runConfiguredHandlers(followHandlers, context)
+  }
+
+  async function handleRaid(event) {
+    const context = createRaidContext(event)
+    state.communityEventCount += 1
+    state.lastCommunityEventAt = new Date().toISOString()
+    state.lastCommunityEvent = summarizeCommunityEventContext(context)
+    state.lastCommunityEventMatchedHandlers = await runConfiguredHandlers(raidHandlers, context)
+  }
+
   async function runCommand(commandMatch, context) {
     const { command, commandName, after, args } = commandMatch
     const commandContext = {
@@ -544,11 +599,16 @@ function createChatService({ actions, logger = console } = {}) {
     if (!fs.existsSync(config.commandsFile)) {
       commands = []
       commandMap = new Map()
+      followHandlers = []
+      raidHandlers = []
       redemptionHandlers = []
       redemptionUpdateHandlers = []
       automaticRedemptionHandlers = []
       rewardEventHandlers = []
       state.commandCount = 0
+      state.communityEventHandlerCount = 0
+      state.followHandlerCount = 0
+      state.raidHandlerCount = 0
       state.redemptionHandlerCount = 0
       state.redemptionUpdateHandlerCount = 0
       state.automaticRedemptionHandlerCount = 0
@@ -563,6 +623,8 @@ function createChatService({ actions, logger = console } = {}) {
       const automationConfig = normalizeAutomationConfig(parsed)
       const nextCommands = automationConfig.commands.map(command => normalizeCommand(command, config.commandPrefix)).filter(Boolean)
       const nextCommandMap = new Map()
+      const nextFollowHandlers = automationConfig.follows.map(handler => normalizeActionHandler(handler, 'follow.add')).filter(Boolean)
+      const nextRaidHandlers = automationConfig.raids.map(handler => normalizeActionHandler(handler, 'raid.add')).filter(Boolean)
       const nextRedemptionHandlers = automationConfig.redemptions.map(handler => normalizeActionHandler(handler, 'redemption.add')).filter(Boolean)
       const nextRedemptionUpdateHandlers = automationConfig.redemptionUpdates.map(handler => normalizeActionHandler(handler, 'redemption.update')).filter(Boolean)
       const nextAutomaticRedemptionHandlers = automationConfig.automaticRedemptions.map(handler => normalizeActionHandler(handler, 'automatic-redemption.add')).filter(Boolean)
@@ -577,18 +639,24 @@ function createChatService({ actions, logger = console } = {}) {
 
       commands = nextCommands
       commandMap = nextCommandMap
+      followHandlers = nextFollowHandlers
+      raidHandlers = nextRaidHandlers
       redemptionHandlers = nextRedemptionHandlers
       redemptionUpdateHandlers = nextRedemptionUpdateHandlers
       automaticRedemptionHandlers = nextAutomaticRedemptionHandlers
       rewardEventHandlers = nextRewardEventHandlers
       state.commandCount = commandMap.size
+      state.followHandlerCount = followHandlers.length
+      state.raidHandlerCount = raidHandlers.length
+      state.communityEventHandlerCount = followHandlers.length + raidHandlers.length
       state.redemptionHandlerCount = redemptionHandlers.length
       state.redemptionUpdateHandlerCount = redemptionUpdateHandlers.length
       state.automaticRedemptionHandlerCount = automaticRedemptionHandlers.length
       state.rewardEventHandlerCount = rewardEventHandlers.length
       state.commandsLoadedAt = new Date().toISOString()
       state.commandsLastError = null
-      logger.log(`Loaded ${state.commandCount} Twitch chat command${state.commandCount === 1 ? '' : 's'} and ${state.redemptionHandlerCount + state.redemptionUpdateHandlerCount + state.automaticRedemptionHandlerCount + state.rewardEventHandlerCount} reward handler${state.redemptionHandlerCount + state.redemptionUpdateHandlerCount + state.automaticRedemptionHandlerCount + state.rewardEventHandlerCount === 1 ? '' : 's'}`)
+      const rewardHandlerCount = state.redemptionHandlerCount + state.redemptionUpdateHandlerCount + state.automaticRedemptionHandlerCount + state.rewardEventHandlerCount
+      logger.log(`Loaded ${state.commandCount} Twitch chat command${state.commandCount === 1 ? '' : 's'}, ${rewardHandlerCount} reward handler${rewardHandlerCount === 1 ? '' : 's'}, and ${state.communityEventHandlerCount} community event handler${state.communityEventHandlerCount === 1 ? '' : 's'}`)
     } catch (error) {
       state.commandsLastError = error.message
       logger.error(`Failed to load Twitch commands from ${relativePath(config.commandsFile)}: ${error.message}`)
@@ -628,8 +696,10 @@ function createChatService({ actions, logger = console } = {}) {
   }
 }
 
-async function createAuthProvider(twurple, config, logger) {
+async function createAuthProvider(twurple, config, logger, options = {}) {
   if (!config.clientId) throw new Error('TWITCH_CLIENT_ID is required when CHAT_ENABLED=true')
+  const needsBroadcasterToken = Boolean(options.needsBroadcasterToken)
+  const needsFollowScopes = Boolean(options.needsFollowScopes)
 
   const botToken = readTokenConfig(config.tokenFile)
   const botAccessToken = cleanAccessToken(botToken.accessToken || config.botAccessToken)
@@ -638,13 +708,13 @@ async function createAuthProvider(twurple, config, logger) {
   const botObtainmentTimestamp = botToken.obtainmentTimestamp || config.botObtainmentTimestamp
   const botScope = botToken.scope || config.botScopes
 
-  if (config.enableRedemptions) {
+  if (needsBroadcasterToken) {
     if (!config.clientSecret) {
-      throw new Error('TWITCH_CLIENT_SECRET is required when CHAT_ENABLE_REDEMPTIONS=true')
+      throw new Error('TWITCH_CLIENT_SECRET is required when broadcaster EventSub auth is needed')
     }
 
     if (!botRefreshToken) {
-      throw new Error('TWITCH_BOT_REFRESH_TOKEN is required when CHAT_ENABLE_REDEMPTIONS=true')
+      throw new Error('TWITCH_BOT_REFRESH_TOKEN is required when broadcaster EventSub auth is needed')
     }
 
     const broadcasterToken = readTokenConfig(config.broadcasterTokenFile)
@@ -655,7 +725,7 @@ async function createAuthProvider(twurple, config, logger) {
     const broadcasterScope = broadcasterToken.scope || config.broadcasterScopes
 
     if (!broadcasterRefreshToken) {
-      throw new Error('TWITCH_BROADCASTER_REFRESH_TOKEN is required when CHAT_ENABLE_REDEMPTIONS=true')
+      throw new Error('TWITCH_BROADCASTER_REFRESH_TOKEN is required when broadcaster EventSub auth is needed')
     }
 
     const authProvider = new twurple.RefreshingAuthProvider({
@@ -691,11 +761,17 @@ async function createAuthProvider(twurple, config, logger) {
       obtainmentTimestamp: broadcasterObtainmentTimestamp,
       refreshToken: broadcasterRefreshToken,
       scope: broadcasterScope
-    }), [REDEMPTION_INTENT])
+    }), [BROADCASTER_INTENT])
     tokenFilesByUserId.set(broadcasterUserId, config.broadcasterTokenFile)
 
-    warnMissingScopes(authProvider.getCurrentScopesForUser(botUserId), REQUIRED_SCOPES, logger)
-    warnMissingAnyScope(authProvider.getCurrentScopesForUser(broadcasterUserId), REDEMPTION_SCOPES, logger, 'Twitch broadcaster')
+    warnMissingScopes(authProvider.getCurrentScopesForUser(botUserId), CHAT_SCOPES, logger)
+    const broadcasterScopes = authProvider.getCurrentScopesForUser(broadcasterUserId)
+    if (config.enableRedemptions) {
+      warnMissingAnyScope(broadcasterScopes, REDEMPTION_SCOPES, logger, 'Twitch broadcaster')
+    }
+    if (needsFollowScopes) {
+      warnMissingScopes(broadcasterScopes, FOLLOW_SCOPES, logger, 'Twitch broadcaster token')
+    }
 
     return { authProvider, botUserId, broadcasterUserId, mode: 'refreshing' }
   }
@@ -726,7 +802,7 @@ async function createAuthProvider(twurple, config, logger) {
       scope: botScope
     }), [CHAT_INTENT])
 
-    warnMissingScopes(authProvider.getCurrentScopesForUser(botUserId), REQUIRED_SCOPES, logger)
+    warnMissingScopes(authProvider.getCurrentScopesForUser(botUserId), CHAT_SCOPES, logger)
 
     return { authProvider, botUserId, mode: 'refreshing' }
   }
@@ -740,7 +816,7 @@ async function createAuthProvider(twurple, config, logger) {
   const botUserId = config.botUserId || tokenInfo.userId
   if (!botUserId) throw new Error('Unable to determine Twitch bot user ID from token')
 
-  warnMissingScopes(tokenInfo.scopes, REQUIRED_SCOPES, logger)
+  warnMissingScopes(tokenInfo.scopes, CHAT_SCOPES, logger)
   logger.warn('Twitch chat is using a static access token; add TWITCH_BOT_REFRESH_TOKEN for durable refreshes')
   return { authProvider, botUserId, mode: 'static' }
 }
@@ -912,6 +988,54 @@ function createRewardEventContext(eventName, event) {
   }
 }
 
+function createFollowContext(event) {
+  const followedAt = dateToIso(event.followDate)
+
+  return {
+    broadcaster: event.broadcasterName,
+    broadcasterDisplayName: event.broadcasterDisplayName,
+    broadcasterId: event.broadcasterId,
+    displayName: event.userDisplayName,
+    event: 'follow.add',
+    follow: {
+      followedAt,
+      userDisplayName: event.userDisplayName,
+      userId: event.userId,
+      username: event.userName
+    },
+    message: `${event.userDisplayName} followed`,
+    source: 'follow',
+    user: event.userName,
+    userId: event.userId,
+    username: event.userName
+  }
+}
+
+function createRaidContext(event) {
+  return {
+    broadcaster: event.raidedBroadcasterName,
+    broadcasterDisplayName: event.raidedBroadcasterDisplayName,
+    broadcasterId: event.raidedBroadcasterId,
+    displayName: event.raidingBroadcasterDisplayName,
+    event: 'raid.add',
+    message: `${event.raidingBroadcasterDisplayName} raided with ${event.viewers} viewers`,
+    raid: {
+      fromBroadcasterDisplayName: event.raidingBroadcasterDisplayName,
+      fromBroadcasterId: event.raidingBroadcasterId,
+      fromBroadcasterName: event.raidingBroadcasterName,
+      toBroadcasterDisplayName: event.raidedBroadcasterDisplayName,
+      toBroadcasterId: event.raidedBroadcasterId,
+      toBroadcasterName: event.raidedBroadcasterName,
+      viewers: event.viewers
+    },
+    source: 'raid',
+    user: event.raidingBroadcasterName,
+    userId: event.raidingBroadcasterId,
+    username: event.raidingBroadcasterName,
+    viewers: event.viewers
+  }
+}
+
 function summarizeRedemptionContext(context) {
   return {
     automaticReward: context.automaticReward || null,
@@ -931,6 +1055,17 @@ function summarizeRewardEventContext(context) {
   return {
     event: context.event,
     reward: context.reward
+  }
+}
+
+function summarizeCommunityEventContext(context) {
+  return {
+    displayName: context.displayName,
+    event: context.event,
+    follow: context.follow || null,
+    raid: context.raid || null,
+    user: context.user,
+    userId: context.userId
   }
 }
 
@@ -980,6 +1115,7 @@ function matchesHandler(handler, context) {
   const username = normalizeMatchValue(context.username || context.user)
   const displayName = normalizeMatchValue(context.displayName)
   const input = normalizeMatchValue(context.input || context.message)
+  const viewerCount = Number(context.viewers || (context.raid && context.raid.viewers) || 0)
 
   if (handler.rewardIds.length && !handler.rewardIds.includes(rewardId)) return false
   if (handler.rewardTitles.length && !handler.rewardTitles.includes(rewardTitle)) return false
@@ -989,6 +1125,8 @@ function matchesHandler(handler, context) {
   if (handler.usernames.length && !handler.usernames.includes(username) && !handler.usernames.includes(displayName)) return false
   if (handler.inputContains.length && !handler.inputContains.some(value => input.includes(value))) return false
   if (handler.inputPatterns.length && !handler.inputPatterns.some(pattern => testRegex(pattern, context.input || context.message || ''))) return false
+  if (handler.minViewers !== null && viewerCount < handler.minViewers) return false
+  if (handler.maxViewers !== null && viewerCount > handler.maxViewers) return false
 
   return true
 }
@@ -998,11 +1136,11 @@ function testRegex(pattern, value) {
   return pattern.test(value)
 }
 
-function warnMissingScopes(actualScopes, requiredScopes, logger) {
+function warnMissingScopes(actualScopes, requiredScopes, logger, label = 'Twitch bot token') {
   const actual = new Set(actualScopes || [])
   const missing = requiredScopes.filter(scope => !actual.has(scope))
   if (missing.length) {
-    logger.warn(`Twitch bot token is missing recommended scope${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`)
+    logger.warn(`${label} is missing recommended scope${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`)
   }
 }
 
@@ -1018,6 +1156,8 @@ function normalizeAutomationConfig(parsed) {
     return {
       automaticRedemptions: [],
       commands: parsed,
+      follows: [],
+      raids: [],
       redemptions: [],
       redemptionUpdates: [],
       rewardEvents: []
@@ -1031,6 +1171,8 @@ function normalizeAutomationConfig(parsed) {
   return {
     automaticRedemptions: asArray(parsed.automaticRedemptions || parsed.automaticRewards),
     commands: asArray(parsed.commands),
+    follows: asArray(parsed.follows || parsed.followers || parsed.followEvents),
+    raids: asArray(parsed.raids || parsed.raidEvents),
     redemptions: asArray(parsed.redemptions || parsed.rewardRedemptions),
     redemptionUpdates: asArray(parsed.redemptionUpdates),
     rewardEvents: asArray(parsed.rewardEvents)
@@ -1072,6 +1214,8 @@ function normalizeActionHandler(handler, defaultEvent) {
   const usernames = normalizeMatchList(match.username || match.usernames || match.userName || match.userNames || match.displayName || match.displayNames || handler.username || handler.usernames || handler.userName || handler.userNames || handler.displayName || handler.displayNames)
   const inputContains = normalizeMatchList(match.inputContains || match.messageContains || handler.inputContains || handler.messageContains)
   const inputPatterns = normalizeRegexList(match.inputMatches || match.messageMatches || match.inputPattern || handler.inputMatches || handler.messageMatches || handler.inputPattern)
+  const minViewers = numberOrNull(match.minViewers || match.minimumViewers || handler.minViewers || handler.minimumViewers)
+  const maxViewers = numberOrNull(match.maxViewers || match.maximumViewers || handler.maxViewers || handler.maximumViewers)
   const name = normalizeMatchValue(match.name || handler.name)
   const keyParts = [
     events.join(',') || defaultEvent || 'reward',
@@ -1083,7 +1227,9 @@ function normalizeActionHandler(handler, defaultEvent) {
     userIds.join(','),
     usernames.join(','),
     inputContains.join(','),
-    inputPatterns.map(pattern => pattern.source).join(',')
+    inputPatterns.map(pattern => pattern.source).join(','),
+    minViewers === null ? '' : `min${minViewers}`,
+    maxViewers === null ? '' : `max${maxViewers}`
   ].filter(Boolean)
 
   return {
@@ -1094,6 +1240,8 @@ function normalizeActionHandler(handler, defaultEvent) {
     key: keyParts.join(':'),
     inputContains,
     inputPatterns,
+    maxViewers,
+    minViewers,
     name,
     rewardIds,
     rewardTitles,
@@ -1139,7 +1287,7 @@ function normalizeRegex(value) {
     if (match) return new RegExp(match[1], match[2])
     return new RegExp(text, 'i')
   } catch (error) {
-    throw new Error(`Invalid redemption input pattern "${text}": ${error.message}`)
+    throw new Error(`Invalid handler input pattern "${text}": ${error.message}`)
   }
 }
 
@@ -1154,6 +1302,11 @@ function normalizeEventName(value) {
     automatic: 'automatic-redemption.add',
     automaticRedemption: 'automatic-redemption.add',
     automaticredemption: 'automatic-redemption.add',
+    follow: 'follow.add',
+    followed: 'follow.add',
+    follower: 'follow.add',
+    raid: 'raid.add',
+    raided: 'raid.add',
     redemption: 'redemption.add',
     redeemed: 'redemption.add',
     remove: 'reward.remove',
@@ -1296,6 +1449,12 @@ function numberOrUndefined(value) {
   return Number.isFinite(number) ? number : undefined
 }
 
+function numberOrNull(value) {
+  if (value === undefined || value === null || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function numberOrDefault(value, defaultValue) {
   const number = Number(value)
   return Number.isFinite(number) && number > 0 ? number : defaultValue
@@ -1328,7 +1487,8 @@ async function loadTwurple() {
 }
 
 module.exports = {
+  FOLLOW_SCOPES,
   createChatService,
   REDEMPTION_SCOPES,
-  REQUIRED_SCOPES
+  CHAT_SCOPES
 }

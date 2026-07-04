@@ -42,7 +42,6 @@ function createObsService({ logger = console } = {}) {
 
   obs.on('CurrentProgramSceneChanged', data => {
     state.currentScene = data.sceneName
-    logger.log(`OBS scene changed to: ${data.sceneName}`)
   })
 
   async function connect() {
