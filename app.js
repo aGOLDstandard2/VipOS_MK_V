@@ -244,6 +244,15 @@ app.post('/api/v1/sound', asyncHandler(async (req, res) => {
   res.json({ ok: true, results })
 }))
 
+app.post('/api/v1/sound-random', asyncHandler(async (req, res) => {
+  const results = await actions.run([
+    { type: 'sound.pickRandom', contextKey: 'sfx' },
+    { type: 'overlay.alert', message: '{sfx.text}' },
+    { type: 'sound.play', src: '{sfx.src}', volume: 0.8 }
+  ], { source: 'api' })
+  res.json({ ok: true, results })
+}))
+
 app.post('/api/v1/chat/say', asyncHandler(async (req, res) => {
   const message = getBodyMessage(req)
   if (!message) return res.status(400).json({ error: 'message or msg is required' })
