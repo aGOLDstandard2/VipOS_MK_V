@@ -164,6 +164,10 @@ app.get('/overlay/venom-coin', (req, res) => {
   res.render('overlays/venom-coin.ejs')
 })
 
+app.get('/overlay/viper-cam', (req, res) => {
+  res.render('overlays/viper-cam.ejs')
+})
+
 
 /**
  * API Endpoints
