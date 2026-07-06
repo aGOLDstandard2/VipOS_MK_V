@@ -1,0 +1,50 @@
+{
+  "macros": [
+    {
+      "id": "starting-soon",
+      "name": "Starting Soon",
+      "description": "Switch OBS to your starting soon scene and announce the stream warmup.",
+      "actions": [
+        { "type": "obs.scene", "scene": "Starting Soon" },
+        { "type": "overlay.emit", "event": "bg-reset" },
+        { "type": "overlay.alert", "message": "Stream starting soon" }
+      ]
+    },
+    {
+      "id": "brb",
+      "name": "BRB",
+      "description": "Switch to BRB and show a quick overlay note.",
+      "actions": [
+        { "type": "obs.scene", "scene": "BRB" },
+        { "type": "overlay.alert", "message": "Be right back" }
+      ]
+    },
+    {
+      "id": "hype-moment",
+      "name": "Hype Moment",
+      "description": "Fire a random SFX alert for high-energy moments.",
+      "actions": [
+        { "type": "sound.pickRandom", "contextKey": "sfx" },
+        { "type": "overlay.alert", "message": "{sfx.text}" },
+        { "type": "sound.play", "src": "{sfx.src}", "volume": 0.9 }
+      ]
+    },
+    {
+      "id": "raid-response",
+      "name": "Raid Response",
+      "description": "Welcome incoming raiders from the control panel.",
+      "actions": [
+        { "type": "overlay.alert", "message": "Welcome in, raiders!" },
+        { "type": "chat.say", "message": "Welcome in, raiders. Thanks for being here!" }
+      ]
+    },
+    {
+      "id": "emergency-reset",
+      "name": "Emergency Reset",
+      "description": "Reset the stream border and clear loud visual states.",
+      "actions": [
+        { "type": "overlay.emit", "event": "bg-reset" }
+      ]
+    }
+  ]
+}

@@ -12,14 +12,18 @@ const favicon = require('serve-favicon')
 const path = require('path')
 
 const { createActionRunner, validateSoundSrc } = require('./modules/actions')
+const { createActionQueue } = require('./modules/action-queue')
 const { createChatService } = require('./modules/chat')
 const { createGreetingService } = require('./modules/greetings')
+const { createMacroService } = require('./modules/macros')
 const { createObsService } = require('./modules/obs')
 
 const PORT = Number(process.env.PORT) || 5000
 const APP_NAME = process.env.APP_NAME || 'VipOS MK V'
 const APP_DESCRIPTION = process.env.APP_DESCRIPTION || 'Chat Bot + Overlay Platform'
 const DEFAULT_ALERT_SOUND = process.env.DEFAULT_ALERT_SOUND || 'kitt_scanner.mp3'
+const DEFAULT_SOUND_COMPLETION_DELAY_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPLETION_DELAY_MS, 4000)
+const SOUND_COMPLETION_BUFFER_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPLETION_BUFFER_MS, 250)
 const ALLOWED_ORIGINS = new Set([
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`
@@ -42,6 +46,12 @@ const io = new Server(server, {
 const obs = createObsService()
 const greetings = createGreetingService()
 const actions = createActionRunner({ io, obs, greetings })
+const actionQueue = createActionQueue({
+  actions,
+  soundCompletionBufferMs: SOUND_COMPLETION_BUFFER_MS,
+  soundCompletionFallbackMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+})
+const macros = createMacroService()
 const chat = createChatService({ actions })
 actions.setChatService(chat)
 
@@ -80,6 +90,36 @@ app.locals.appDescription = APP_DESCRIPTION
  */
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 const getBodyMessage = req => req.body.message || req.body.msg || req.query.message || ''
+
+function enqueueApiActions(res, name, actionList, options = {}) {
+  const delayValue = options.completionDelayMs ?? options.delayMs
+  const completionDelayMs = delayValue === undefined ? undefined : normalizeCompletionDelay(delayValue)
+  const queue = actionQueue.enqueue({
+    name,
+    actions: actionList,
+    completionDelayMs,
+    fallbackCompletionDelayMs: options.fallbackCompletionDelayMs,
+    context: { source: 'api', ...(options.context || {}) },
+    source: 'api'
+  })
+  res.json({ ok: true, queued: true, completionDelayMs, fallbackCompletionDelayMs: options.fallbackCompletionDelayMs, queue })
+}
+
+function getRequestCompletionDelay(req) {
+  const value = req.body.completionDelayMs ?? req.body.delayMs ?? req.body.queueDelayMs
+  return value === undefined ? undefined : normalizeCompletionDelay(value)
+}
+
+function normalizeCompletionDelay(value) {
+  const delay = Number(value || 0)
+  if (!Number.isFinite(delay) || delay <= 0) return 0
+  return Math.min(Math.round(delay), 10 * 60 * 1000)
+}
+
+function numberOrDefault(value, defaultValue) {
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 ? number : defaultValue
+}
 
 
 /**
@@ -185,15 +225,28 @@ app.get('/api/v1/status', (req, res) => {
     obs: obs.getStatus(),
     chat: chat.getStatus(),
     greetings: greetings.getStatus(),
+    queue: actionQueue.getStatus(),
     sockets: {
       clients: io.engine.clientsCount
     }
   })
 })
 
+app.get('/api/v1/macros', (req, res) => {
+  res.json({ ok: true, macros: macros.list() })
+})
+
+app.get('/api/v1/queue', (req, res) => {
+  res.json({ ok: true, queue: actionQueue.getStatus() })
+})
+
 app.get('/api/v1/greetings', (req, res) => {
   res.json({ ok: true, greetings: greetings.getStatus() })
 })
+
+app.get('/api/v1/obs/discovery', asyncHandler(async (req, res) => {
+  res.json({ ok: true, obs: await obs.getDiscovery() })
+}))
 
 app.post('/api/v1/greetings/pool', asyncHandler(async (req, res) => {
   const pool = req.body.pool || req.body.theme || req.body.activePool
@@ -202,47 +255,57 @@ app.post('/api/v1/greetings/pool', asyncHandler(async (req, res) => {
 }))
 
 app.post('/api/v1/bg-alert', asyncHandler(async (req, res) => {
-  const results = await actions.run([
+  enqueueApiActions(res, 'Border Alert', [
     { type: 'overlay.emit', event: 'bg-alert' },
     { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 app.post('/api/v1/bg-random', asyncHandler(async (req, res) => {
-  const results = await actions.run([
+  enqueueApiActions(res, 'Random Border', [
     { type: 'overlay.emit', event: 'bg-random' },
     { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 app.post('/api/v1/bg-reset', asyncHandler(async (req, res) => {
-  const results = await actions.run([
+  enqueueApiActions(res, 'Reset Border', [
     { type: 'overlay.emit', event: 'bg-reset' },
     { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 app.post('/api/v1/text', asyncHandler(async (req, res) => {
   const message = getBodyMessage(req)
   if (!message) return res.status(400).json({ error: 'message or msg is required' })
-  const results = await actions.run([
+  enqueueApiActions(res, 'Text Alert', [
     { type: 'overlay.alert', message },
     { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 app.post('/api/v1/alert', asyncHandler(async (req, res) => {
   const message = getBodyMessage(req)
   if (!message) return res.status(400).json({ error: 'message or msg is required' })
-  const results = await actions.run([
+  enqueueApiActions(res, 'Overlay Alert', [
     { type: 'overlay.alert', message },
     { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 app.post('/api/v1/sound', asyncHandler(async (req, res) => {
@@ -254,46 +317,62 @@ app.post('/api/v1/sound', asyncHandler(async (req, res) => {
     })
   }
 
-  const results = await actions.run([
+  enqueueApiActions(res, 'Sound Alert', [
     { type: 'sound.play', src: soundSrc, volume },
     { type: 'overlay.emit', event: 'bg-alert' }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 app.post('/api/v1/sound-random', asyncHandler(async (req, res) => {
-  const results = await actions.run([
+  enqueueApiActions(res, 'Random SFX Alert', [
     { type: 'sound.pickRandom', contextKey: 'sfx' },
     { type: 'overlay.alert', message: '{sfx.text}' },
     { type: 'sound.play', src: '{sfx.src}', volume: 0.8 }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 app.post('/api/v1/chat/say', asyncHandler(async (req, res) => {
   const message = getBodyMessage(req)
   if (!message) return res.status(400).json({ error: 'message or msg is required' })
 
-  const results = await actions.run({ type: 'chat.say', message }, { source: 'api' })
-  res.json({ ok: true, results })
+  enqueueApiActions(res, 'Chat Message', { type: 'chat.say', message })
 }))
+
+app.post('/api/v1/queue/pause', (req, res) => {
+  res.json({ ok: true, queue: actionQueue.pause() })
+})
+
+app.post('/api/v1/queue/resume', (req, res) => {
+  res.json({ ok: true, queue: actionQueue.resume() })
+})
+
+app.post('/api/v1/queue/skip', (req, res) => {
+  res.json({ ok: true, queue: actionQueue.skipNext() })
+})
+
+app.post('/api/v1/queue/clear', (req, res) => {
+  res.json({ ok: true, queue: actionQueue.clear() })
+})
 
 app.post('/api/v1/obs/scene', asyncHandler(async (req, res) => {
   const { scene } = req.body
-  const results = await actions.run({ type: 'obs.scene', scene }, { source: 'api' })
-  res.json({ ok: true, results })
+  enqueueApiActions(res, 'OBS Scene', { type: 'obs.scene', scene })
 }))
 
 app.post('/api/v1/obs/source', asyncHandler(async (req, res) => {
   const { scene, source, visible, status } = req.body
-  const results = await actions.run({ type: 'obs.source', scene, source, visible: visible ?? status }, { source: 'api' })
-  res.json({ ok: true, results })
+  enqueueApiActions(res, 'OBS Source', { type: 'obs.source', scene, source, visible: visible ?? status })
 }))
 
 app.post('/api/v1/obs/mute', asyncHandler(async (req, res) => {
   const { input, source, muted, status } = req.body
-  const results = await actions.run({ type: 'obs.mute', input: input || source, muted: muted ?? status }, { source: 'api' })
-  res.json({ ok: true, results })
+  enqueueApiActions(res, 'OBS Mute', { type: 'obs.mute', input: input || source, muted: muted ?? status })
 }))
 
 app.post('/api/v1/actions/run', asyncHandler(async (req, res) => {
@@ -302,12 +381,37 @@ app.post('/api/v1/actions/run', asyncHandler(async (req, res) => {
   res.json({ ok: true, results })
 }))
 
+app.post('/api/v1/actions/enqueue', asyncHandler(async (req, res) => {
+  const submittedActions = req.body.actions || req.body.action || req.body
+  enqueueApiActions(res, req.body.name || 'Control action', submittedActions, {
+    completionDelayMs: getRequestCompletionDelay(req)
+  })
+}))
+
+app.post('/api/v1/macros/:id/run', asyncHandler(async (req, res) => {
+  const macro = macros.find(req.params.id)
+  if (!macro) return res.status(404).json({ error: 'Macro not found' })
+  const macroDelay = macro.completionDelayMs ?? macro.delayMs
+
+  const queue = actionQueue.enqueue({
+    name: macro.name,
+    actions: macro.actions,
+    completionDelayMs: macroDelay === undefined ? undefined : normalizeCompletionDelay(macroDelay),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS,
+    context: { macro: macro.id, source: 'macro' },
+    source: 'macro'
+  })
+  res.json({ ok: true, macro, queue })
+}))
+
 app.post('/api/v1/test', asyncHandler(async (req, res) => {
-  const results = await actions.run([
+  enqueueApiActions(res, 'Test Alert', [
     { type: 'overlay.alert', message: 'VipOS MK V test alert' },
     { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-  ], { source: 'api' })
-  res.json({ ok: true, results })
+  ], {
+    completionDelayMs: getRequestCompletionDelay(req),
+    fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
 }))
 
 

@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { getAudioDurationMs } = require('./audio-duration')
 const { createGreetingService } = require('./greetings')
 
 const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', 'sounds')
@@ -93,8 +94,9 @@ function createActionRunner({
           throw userInputError('sound.play requires a local sound path ending in .mp3, .ogg, or .wav')
         }
         const volume = clamp(Number(action.volume ?? 1), 0, 1)
+        const durationMs = getSoundDurationMs(src, soundDirectory, logger)
         io.emit('sound-play', { src, volume })
-        return { type, src, volume }
+        return { type, src, volume, durationMs }
       }
 
       case 'sound.pickRandom': {
@@ -290,6 +292,27 @@ function getSoundText(src, textMap) {
   const mappedText = textMap[src]
   if (mappedText !== undefined && mappedText !== null && String(mappedText).trim()) return String(mappedText)
   return path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim()
+}
+
+function getSoundDurationMs(src, soundDirectory, logger = console) {
+  const filePath = resolveSoundPath(src, soundDirectory)
+  if (!filePath) return null
+
+  try {
+    return getAudioDurationMs(filePath)
+  } catch (error) {
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(`Failed to read sound duration for ${src}: ${error.message}`)
+    }
+    return null
+  }
+}
+
+function resolveSoundPath(src, soundDirectory) {
+  const resolved = path.resolve(soundDirectory, src)
+  const relative = path.relative(soundDirectory, resolved)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return null
+  return resolved
 }
 
 function asArray(value) {

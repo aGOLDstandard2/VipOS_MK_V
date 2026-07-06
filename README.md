@@ -11,6 +11,19 @@
 - Alerts overlay, including sound alerts: `http://localhost:5000/overlay/alerts`
 - Stream border overlay: `http://localhost:5000/overlay/stream-border`
 
+## Control Panel
+The control panel includes configured macro buttons, action queue controls, OBS scene/source/input discovery, manual overlay controls, chat messages, and the raw action runner.
+
+Copy `config/macros.example.json` to `config/macros.json` and edit the production macros for your stream. Each macro has an `id`, `name`, optional `description`, and `actions`.
+
+Macros and standard control-panel actions run through the action queue so common stream moments do not stack alerts or OBS actions on top of each other. The queue can be paused, resumed, skipped, or cleared from the control panel.
+
+Use `POST /api/v1/actions/enqueue` to queue custom actions. Use `POST /api/v1/actions/run` only when you intentionally need to bypass the queue and run actions immediately.
+
+Queued sound actions use the local audio file duration to keep the item running until the effect should be finished. `sound.play` returns the detected `durationMs`, and the queue waits for the longest sound in the action results plus `QUEUE_SOUND_COMPLETION_BUFFER_MS`, defaulting to `250`. If a duration cannot be read, the queue falls back to `QUEUE_SOUND_COMPLETION_DELAY_MS`, defaulting to `4000`. Request bodies or macros may override automatic timing with `completionDelayMs`, `delayMs`, or `queueDelayMs`.
+
+OBS dropdowns are populated from the live OBS WebSocket connection. If OBS is not connected, the controls stay disabled until OBS discovery succeeds.
+
 ## Chat Commands
 Copy `config/commands.example.json` to `config/commands.json` and edit the commands/actions for your stream.
 The commands file is watched and reloaded while the app is running.

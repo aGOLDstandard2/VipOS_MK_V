@@ -19,6 +19,37 @@
     <section class="control-section control-section--wide">
       <div class="section-heading">
         <div>
+          <h2>Macros</h2>
+          <p>Run configured production sequences through the action queue.</p>
+        </div>
+        <button type="button" class="secondary-button compact-button" data-refresh-macros>Refresh</button>
+      </div>
+      <div class="macro-grid" data-macro-list>
+        <div class="status-item">Loading macros...</div>
+      </div>
+    </section>
+
+    <section class="control-section control-section--wide">
+      <div class="section-heading">
+        <div>
+          <h2>Action Queue</h2>
+          <p>Sequence macro and action-runner events without stacking alerts on top of each other.</p>
+        </div>
+        <div class="button-row">
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/queue/pause">Pause</button>
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/queue/resume">Resume</button>
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/queue/skip">Skip Next</button>
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/queue/clear">Clear</button>
+        </div>
+      </div>
+      <div class="queue-board" data-queue-status>
+        <div class="status-item">Loading queue...</div>
+      </div>
+    </section>
+
+    <section class="control-section control-section--wide">
+      <div class="section-heading">
+        <div>
           <h2>Overlay Alerts</h2>
           <p>Trigger text alerts and stream-border states.</p>
         </div>
@@ -105,12 +136,15 @@
           <h2>OBS</h2>
           <p>Switch scenes, show or hide sources, mute inputs, and control media inputs.</p>
         </div>
+        <button type="button" class="secondary-button compact-button" data-refresh-obs>Refresh OBS</button>
       </div>
 
       <form data-json-form data-endpoint="/api/v1/obs/scene">
         <label for="obs-scene">Scene</label>
         <div class="control-row">
-          <input id="obs-scene" name="scene" type="text" placeholder="Scene name" autocomplete="off" />
+          <select id="obs-scene" name="scene" data-obs-scenes aria-label="Scene">
+            <option value="">Loading scenes</option>
+          </select>
           <button type="submit">Switch</button>
         </div>
       </form>
@@ -118,8 +152,12 @@
       <form data-json-form data-endpoint="/api/v1/obs/source">
         <label for="obs-source">Source visibility</label>
         <div class="control-row">
-          <input name="scene" type="text" placeholder="Scene, optional current scene" autocomplete="off" />
-          <input id="obs-source" name="source" type="text" placeholder="Source name" autocomplete="off" />
+          <select name="scene" data-obs-source-scenes aria-label="Source scene">
+            <option value="">Current scene</option>
+          </select>
+          <select id="obs-source" name="source" data-obs-sources aria-label="Source">
+            <option value="">Select source</option>
+          </select>
           <select name="visible" aria-label="Visibility action">
             <option value="toggle">Toggle</option>
             <option value="true">Show</option>
@@ -132,7 +170,9 @@
       <form data-json-form data-endpoint="/api/v1/obs/mute">
         <label for="obs-input">Audio input</label>
         <div class="control-row">
-          <input id="obs-input" name="input" type="text" placeholder="Input name" autocomplete="off" />
+          <select id="obs-input" name="input" data-obs-inputs aria-label="Audio input">
+            <option value="">Select input</option>
+          </select>
           <select name="muted" aria-label="Mute action">
             <option value="toggle">Toggle</option>
             <option value="true">Mute</option>
@@ -146,7 +186,9 @@
         <label for="obs-media-input">Media input</label>
         <div class="control-row">
           <input type="hidden" name="type" value="obs.media" />
-          <input id="obs-media-input" name="input" type="text" placeholder="Media input name" autocomplete="off" />
+          <select id="obs-media-input" name="input" data-obs-media-inputs aria-label="Media input">
+            <option value="">Select media input</option>
+          </select>
           <select name="mediaAction" aria-label="Media action">
             <option value="play">Play</option>
             <option value="pause">Pause</option>
@@ -174,6 +216,7 @@
   { "type": "sound.play", "src": "{sfx.src}", "volume": 0.8 }
 ]</textarea>
         <div class="button-row button-row--end">
+          <button type="button" class="secondary-button" data-enqueue-actions>Queue Actions</button>
           <button type="submit">Run Actions</button>
         </div>
       </form>

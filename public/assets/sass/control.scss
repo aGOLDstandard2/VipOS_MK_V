@@ -156,6 +156,13 @@ body.control-page {
   justify-content: flex-end;
 }
 
+#control-panel .macro-grid,
+#control-panel .queue-board {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 #control-panel input,
 #control-panel select,
 #control-panel textarea {
@@ -201,6 +208,14 @@ body.control-page {
   flex: 0 0 132px;
 }
 
+#control-panel select[data-obs-scenes],
+#control-panel select[data-obs-source-scenes],
+#control-panel select[data-obs-sources],
+#control-panel select[data-obs-inputs],
+#control-panel select[data-obs-media-inputs] {
+  flex: 1 1 180px;
+}
+
 #control-panel button {
   background: #f3f5f7;
   border: 0;
@@ -232,6 +247,43 @@ body.control-page {
   font-size: 12px;
   min-height: 30px;
   padding: 0 10px;
+}
+
+#control-panel .macro-button {
+  align-items: flex-start;
+  background: #101419;
+  border: 1px solid #2b333d;
+  color: #f7f9fb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 96px;
+  padding: 14px;
+  text-align: left;
+  white-space: normal;
+}
+
+#control-panel .macro-button:hover {
+  background: #1c232c;
+}
+
+#control-panel .macro-button strong,
+#control-panel .macro-button span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+#control-panel .macro-button strong {
+  font-size: 13px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+#control-panel .macro-button span {
+  color: #9da6b1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 #control-panel .status-grid {
@@ -268,6 +320,7 @@ body.control-page {
   font-size: 13px;
   line-height: 1.35;
   margin-top: 8px;
+  white-space: pre-line;
 }
 
 #control-panel .control-log-section {
@@ -292,6 +345,8 @@ body.control-page {
 @media screen and (max-width: 980px) {
   #control-panel .control-header,
   #control-panel .control-grid,
+  #control-panel .macro-grid,
+  #control-panel .queue-board,
   #control-panel .status-grid {
     grid-template-columns: 1fr;
   }

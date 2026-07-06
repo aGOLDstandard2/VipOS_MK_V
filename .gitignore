@@ -1,9 +1,9 @@
 .env
-.env.old
 config/auth_notes.txt
 config/commands.json
 config/greetings-settings.json
 config/greetings.json
+config/macros.json
 config/sfx-text.json
 config/twitch-broadcaster-token.json
 config/twitch-token.json

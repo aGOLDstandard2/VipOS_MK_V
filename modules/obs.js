@@ -98,6 +98,48 @@ function createObsService({ logger = console } = {}) {
     return data.currentProgramSceneName
   }
 
+  async function getDiscovery() {
+    const [
+      sceneData,
+      inputData
+    ] = await Promise.all([
+      call('GetSceneList'),
+      call('GetInputList')
+    ])
+    const inputs = (inputData.inputs || []).map(input => ({
+      name: input.inputName,
+      kind: input.inputKind
+    }))
+
+    const sceneItems = await Promise.all((sceneData.scenes || []).map(async scene => {
+      try {
+        const data = await call('GetSceneItemList', { sceneName: scene.sceneName })
+        return {
+          name: scene.sceneName,
+          sources: (data.sceneItems || []).map(item => ({
+            id: item.sceneItemId,
+            name: item.sourceName,
+            type: item.sourceType,
+            enabled: item.sceneItemEnabled
+          }))
+        }
+      } catch (error) {
+        return {
+          name: scene.sceneName,
+          sources: [],
+          error: error.message
+        }
+      }
+    }))
+
+    return {
+      currentScene: sceneData.currentProgramSceneName || state.currentScene,
+      scenes: sceneItems,
+      inputs,
+      mediaInputs: inputs.filter(input => ['ffmpeg_source', 'vlc_source'].includes(input.kind))
+    }
+  }
+
   async function switchScene(sceneName) {
     await call('SetCurrentProgramScene', { sceneName })
     state.currentScene = sceneName
@@ -159,6 +201,7 @@ function createObsService({ logger = console } = {}) {
     connect,
     call,
     getCurrentScene,
+    getDiscovery,
     getStatus,
     mediaAction,
     obs,
