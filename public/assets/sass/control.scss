@@ -1,6 +1,6 @@
 body.control-page {
-  background: #101014;
-  color: #f4f4f6;
+  background: #0e1013;
+  color: #f5f6f8;
   height: auto;
   min-height: 100vh;
   overflow: auto;
@@ -9,105 +9,204 @@ body.control-page {
 
 #control-panel {
   margin: 0 auto;
-  max-width: 1180px;
-  padding: 32px;
+  max-width: 1280px;
+  padding: 28px;
 }
 
 #control-panel .control-header {
-  align-items: center;
-  border-bottom: 1px solid #30303a;
-  display: flex;
-  gap: 24px;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
+  align-items: stretch;
+  border-bottom: 1px solid #292f38;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+}
+
+#control-panel .control-title {
+  align-self: center;
 }
 
 #control-panel .control-header h1 {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 800;
+  line-height: 1.1;
 }
 
-#control-panel .control-header p {
-  color: #a7a7b1;
+#control-panel .control-header p,
+#control-panel .section-heading p {
+  color: #9da6b1;
+  line-height: 1.45;
   margin-top: 6px;
 }
 
+#control-panel .status-card,
+#control-panel .control-section {
+  background: #171b21;
+  border: 1px solid #2b323c;
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+}
+
+#control-panel .status-card {
+  padding: 12px;
+}
+
+#control-panel .status-card__top,
+#control-panel .section-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+#control-panel .status-card__top {
+  align-items: center;
+  color: #c7d0da;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
 #control-panel #service-status {
-  background: #1c1c23;
-  border: 1px solid #363642;
-  border-radius: 6px;
-  color: #d8d8df;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#control-panel .status-pill {
+  background: #232932;
+  border: 1px solid #343d49;
+  border-radius: 999px;
+  color: #e9edf2;
+  display: inline-flex;
   font-size: 13px;
-  line-height: 18px;
-  min-width: 280px;
-  padding: 10px 12px;
-  text-align: right;
+  font-weight: 800;
+  line-height: 1;
+  padding: 8px 10px;
+}
+
+#control-panel .status-pill.is-online {
+  background: #163226;
+  border-color: #2b7f56;
+  color: #c9f8de;
+}
+
+#control-panel .status-pill.is-offline {
+  background: #3b2023;
+  border-color: #8b3a42;
+  color: #ffd1d5;
 }
 
 #control-panel .control-grid {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 #control-panel .control-section {
-  background: #18181f;
-  border: 1px solid #30303a;
-  border-radius: 8px;
-  padding: 18px;
+  padding: 16px;
+}
+
+#control-panel .control-section--wide {
+  grid-column: 1 / -1;
+}
+
+#control-panel .section-heading {
+  margin-bottom: 14px;
 }
 
 #control-panel .control-section h2 {
   color: #ffffff;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: 0.04em;
-  margin-bottom: 16px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
 #control-panel .control-section form + form,
-#control-panel .control-section form + .button-row {
+#control-panel .control-section form + .button-row,
+#control-panel .control-section .button-row + form {
   margin-top: 14px;
 }
 
 #control-panel label {
-  color: #b9b9c4;
+  color: #c2cad4;
   display: block;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   margin-bottom: 8px;
 }
 
 #control-panel .control-row,
 #control-panel .button-row {
+  align-items: stretch;
   display: flex;
   gap: 8px;
 }
 
+#control-panel .button-row {
+  flex-wrap: wrap;
+}
+
+#control-panel .button-row--end {
+  justify-content: flex-end;
+}
+
 #control-panel input,
-#control-panel select {
-  background: #0f0f14;
-  border: 1px solid #393944;
+#control-panel select,
+#control-panel textarea {
+  background: #0b0d10;
+  border: 1px solid #353e49;
   border-radius: 6px;
   color: #ffffff;
   flex: 1;
   font: inherit;
   min-height: 40px;
   min-width: 0;
+  outline: none;
   padding: 0 10px;
 }
 
+#control-panel textarea {
+  display: block;
+  font-family: Consolas, Monaco, "Courier New", monospace;
+  line-height: 1.45;
+  min-height: 170px;
+  padding: 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+#control-panel input::placeholder,
+#control-panel textarea::placeholder {
+  color: #6f7a86;
+}
+
+#control-panel input:focus,
+#control-panel select:focus,
+#control-panel textarea:focus {
+  border-color: #6fb4ff;
+  box-shadow: 0 0 0 3px rgba(111, 180, 255, 0.16);
+}
+
 #control-panel input[type='number'] {
-  flex: 0 0 90px;
+  flex: 0 0 92px;
+}
+
+#control-panel select {
+  flex: 0 0 132px;
 }
 
 #control-panel button {
-  background: #f2f2f4;
+  background: #f3f5f7;
   border: 0;
   border-radius: 6px;
-  color: #111116;
+  color: #101318;
+  cursor: pointer;
   font: inherit;
   font-weight: 800;
   min-height: 40px;
@@ -119,18 +218,87 @@ body.control-page {
   background: #ffffff;
 }
 
+#control-panel .secondary-button {
+  background: #252c35;
+  border: 1px solid #38424f;
+  color: #edf2f7;
+}
+
+#control-panel .secondary-button:hover {
+  background: #303946;
+}
+
+#control-panel .compact-button {
+  font-size: 12px;
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+#control-panel .status-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#control-panel .status-item {
+  background: #101419;
+  border: 1px solid #2b333d;
+  border-radius: 6px;
+  min-height: 66px;
+  padding: 10px;
+}
+
+#control-panel .status-item span,
+#control-panel .status-item strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#control-panel .status-item span {
+  color: #929da9;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#control-panel .status-item strong {
+  color: #f7f9fb;
+  font-size: 13px;
+  line-height: 1.35;
+  margin-top: 8px;
+}
+
+#control-panel .control-log-section {
+  margin-top: 14px;
+}
+
 #control-panel #control-log {
-  background: #08080b;
-  border: 1px solid #30303a;
+  background: #080a0d;
+  border: 1px solid #2b333d;
   border-radius: 8px;
   color: #c7f7da;
+  font-family: Consolas, Monaco, "Courier New", monospace;
   font-size: 13px;
   line-height: 18px;
-  margin-top: 16px;
-  min-height: 160px;
+  margin-top: 12px;
+  min-height: 180px;
   overflow: auto;
   padding: 14px;
   white-space: pre-wrap;
+}
+
+@media screen and (max-width: 980px) {
+  #control-panel .control-header,
+  #control-panel .control-grid,
+  #control-panel .status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #control-panel .control-header {
+    align-items: stretch;
+  }
 }
 
 @media screen and (max-width: 760px) {
@@ -138,23 +306,18 @@ body.control-page {
     padding: 18px;
   }
 
-  #control-panel .control-header,
   #control-panel .control-row,
-  #control-panel .button-row {
-    align-items: stretch;
+  #control-panel .button-row,
+  #control-panel .section-heading {
     flex-direction: column;
   }
 
-  #control-panel #service-status {
-    min-width: 0;
-    text-align: left;
-  }
-
-  #control-panel .control-grid {
-    grid-template-columns: 1fr;
-  }
-
-  #control-panel input[type='number'] {
+  #control-panel input[type='number'],
+  #control-panel select {
     flex: 1;
+  }
+
+  #control-panel button {
+    width: 100%;
   }
 }

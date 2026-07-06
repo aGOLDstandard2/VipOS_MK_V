@@ -2,45 +2,128 @@
 
 <main id="control-panel">
   <header class="control-header">
-    <div>
+    <div class="control-title">
       <h1><%= appName %></h1>
       <p><%= appDescription %></p>
     </div>
-    <div id="service-status" data-status>Loading</div>
+    <div class="status-card" aria-live="polite">
+      <div class="status-card__top">
+        <span>System</span>
+        <button type="button" class="secondary-button compact-button" data-refresh-status>Refresh</button>
+      </div>
+      <div id="service-status" data-status>Loading</div>
+    </div>
   </header>
 
   <section class="control-grid">
-    <div class="control-section">
-      <h2>Overlays</h2>
+    <section class="control-section control-section--wide">
+      <div class="section-heading">
+        <div>
+          <h2>Overlay Alerts</h2>
+          <p>Trigger text alerts and stream-border states.</p>
+        </div>
+      </div>
+
       <form data-json-form data-endpoint="/api/v1/alert">
         <label for="alert-message">Text alert</label>
         <div class="control-row">
-          <input id="alert-message" name="message" type="text" autocomplete="off" />
+          <input id="alert-message" name="message" type="text" placeholder="Message shown on the alert overlay" autocomplete="off" />
           <button type="submit">Send</button>
         </div>
       </form>
+
       <div class="button-row">
-        <button type="button" data-post="/api/v1/bg-alert">Alert</button>
+        <button type="button" data-post="/api/v1/bg-alert">Border Alert</button>
         <button type="button" data-post="/api/v1/bg-random">Random Border</button>
         <button type="button" data-post="/api/v1/bg-reset">Reset Border</button>
-        <button type="button" data-post="/api/v1/test">Test Text Alert</button>
+        <button type="button" data-post="/api/v1/test">Test Alert</button>
       </div>
-    </div>
 
-    <div class="control-section">
-      <h2>OBS</h2>
+      <form data-json-form data-endpoint="/api/v1/actions/run">
+        <label for="overlay-event">Custom overlay event</label>
+        <div class="control-row">
+          <input type="hidden" name="type" value="overlay.emit" />
+          <input id="overlay-event" name="event" type="text" placeholder="bg-alert, bg-random, bg-reset, sound-play..." autocomplete="off" />
+          <input name="payload" type="text" placeholder='Optional payload JSON, e.g. {"message":"Hi"}' autocomplete="off" data-json-field />
+          <button type="submit">Emit</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="control-section">
+      <div class="section-heading">
+        <div>
+          <h2>Sound</h2>
+          <p>Play a specific asset or pick from the SFX folder.</p>
+        </div>
+      </div>
+
+      <form data-json-form data-endpoint="/api/v1/sound">
+        <label for="sound-src">Sound path</label>
+        <div class="control-row">
+          <input id="sound-src" name="src" type="text" placeholder="kitt_scanner.mp3" autocomplete="off" />
+          <input name="volume" type="number" min="0" max="1" step="0.05" value="1" aria-label="Volume" />
+          <button type="submit">Play</button>
+        </div>
+      </form>
+
+      <div class="button-row">
+        <button type="button" data-post="/api/v1/sound-random">Random SFX Alert</button>
+      </div>
+    </section>
+
+    <section class="control-section">
+      <div class="section-heading">
+        <div>
+          <h2>Chat</h2>
+          <p>Send a bot message to the configured channel.</p>
+        </div>
+      </div>
+
+      <form data-json-form data-endpoint="/api/v1/chat/say">
+        <label for="chat-message">Message</label>
+        <div class="control-row">
+          <input id="chat-message" name="message" type="text" placeholder="Message to send as the bot" autocomplete="off" />
+          <button type="submit">Say</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="control-section control-section--wide">
+      <div class="section-heading">
+        <div>
+          <h2>OBS</h2>
+          <p>Switch scenes, show or hide sources, mute inputs, and control media inputs.</p>
+        </div>
+      </div>
+
       <form data-json-form data-endpoint="/api/v1/obs/scene">
         <label for="obs-scene">Scene</label>
         <div class="control-row">
-          <input id="obs-scene" name="scene" type="text" autocomplete="off" />
+          <input id="obs-scene" name="scene" type="text" placeholder="Scene name" autocomplete="off" />
           <button type="submit">Switch</button>
         </div>
       </form>
+
+      <form data-json-form data-endpoint="/api/v1/obs/source">
+        <label for="obs-source">Source visibility</label>
+        <div class="control-row">
+          <input name="scene" type="text" placeholder="Scene, optional current scene" autocomplete="off" />
+          <input id="obs-source" name="source" type="text" placeholder="Source name" autocomplete="off" />
+          <select name="visible" aria-label="Visibility action">
+            <option value="toggle">Toggle</option>
+            <option value="true">Show</option>
+            <option value="false">Hide</option>
+          </select>
+          <button type="submit">Apply</button>
+        </div>
+      </form>
+
       <form data-json-form data-endpoint="/api/v1/obs/mute">
         <label for="obs-input">Audio input</label>
         <div class="control-row">
-          <input id="obs-input" name="input" type="text" autocomplete="off" />
-          <select name="muted">
+          <input id="obs-input" name="input" type="text" placeholder="Input name" autocomplete="off" />
+          <select name="muted" aria-label="Mute action">
             <option value="toggle">Toggle</option>
             <option value="true">Mute</option>
             <option value="false">Unmute</option>
@@ -48,33 +131,67 @@
           <button type="submit">Apply</button>
         </div>
       </form>
-    </div>
 
-    <div class="control-section">
-      <h2>Sound</h2>
-      <form data-json-form data-endpoint="/api/v1/sound">
-        <label for="sound-src">Source path</label>
+      <form data-json-form data-endpoint="/api/v1/actions/run">
+        <label for="obs-media-input">Media input</label>
         <div class="control-row">
-          <input id="sound-src" name="src" type="text" placeholder="example.mp3" autocomplete="off" />
-          <input name="volume" type="number" min="0" max="1" step="0.05" value="1" />
-          <button type="submit">Play</button>
+          <input type="hidden" name="type" value="obs.media" />
+          <input id="obs-media-input" name="input" type="text" placeholder="Media input name" autocomplete="off" />
+          <select name="mediaAction" aria-label="Media action">
+            <option value="play">Play</option>
+            <option value="pause">Pause</option>
+            <option value="restart">Restart</option>
+            <option value="stop">Stop</option>
+          </select>
+          <button type="submit">Trigger</button>
         </div>
       </form>
-    </div>
+    </section>
 
-    <div class="control-section">
-      <h2>Chat</h2>
-      <form data-json-form data-endpoint="/api/v1/chat/say">
-        <label for="chat-message">Message</label>
-        <div class="control-row">
-          <input id="chat-message" name="message" type="text" autocomplete="off" />
-          <button type="submit">Say</button>
+    <section class="control-section control-section--wide">
+      <div class="section-heading">
+        <div>
+          <h2>Action Runner</h2>
+          <p>Run one action object or an array of action objects.</p>
+        </div>
+      </div>
+
+      <form data-json-form data-raw-json data-endpoint="/api/v1/actions/run">
+        <label for="action-json">Actions JSON</label>
+        <textarea id="action-json" name="actions" spellcheck="false">[
+  { "type": "sound.pickRandom", "contextKey": "sfx" },
+  { "type": "overlay.alert", "message": "{sfx.text}" },
+  { "type": "sound.play", "src": "{sfx.src}", "volume": 0.8 }
+]</textarea>
+        <div class="button-row button-row--end">
+          <button type="submit">Run Actions</button>
         </div>
       </form>
-    </div>
+    </section>
+
+    <section class="control-section control-section--wide">
+      <div class="section-heading">
+        <div>
+          <h2>Status Details</h2>
+          <p>Live state from OBS, chat, rewards, command loading, and socket clients.</p>
+        </div>
+      </div>
+      <div class="status-grid" data-status-details>
+        <div class="status-item">Loading status...</div>
+      </div>
+    </section>
   </section>
 
-  <pre id="control-log" aria-live="polite"></pre>
+  <section class="control-section control-section--wide control-log-section">
+    <div class="section-heading">
+      <div>
+        <h2>Response Log</h2>
+        <p>Most recent API response or validation error.</p>
+      </div>
+      <button type="button" class="secondary-button compact-button" data-clear-log>Clear</button>
+    </div>
+    <pre id="control-log" aria-live="polite"></pre>
+  </section>
 </main>
 
 <script type="text/javascript" src="/assets/js/control.js"></script>
