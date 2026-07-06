@@ -54,6 +54,19 @@
       ]
     }
   ],
+  "chatEntries": [
+    {
+      "name": "mod-or-vip-entry",
+      "match": {
+        "roles": ["moderator", "vip"]
+      },
+      "actions": [
+        { "type": "context.pickRandom", "contextKey": "greeting" },
+        { "type": "overlay.alert", "message": "{greeting}, {displayName}!" },
+        { "type": "sound.play", "src": "kitt_scanner.mp3", "volume": 1 }
+      ]
+    }
+  ],
   "redemptions": [
     {
       "name": "hydrate",

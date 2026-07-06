@@ -1,0 +1,23 @@
+{
+  "defaultPool": "sweet",
+  "pools": {
+    "sweet": [
+      "ANGEL",
+      "CUTIE PIE",
+      "LOVEBUG",
+      "SUNSHINE"
+    ],
+    "retro": [
+      "ACE",
+      "BIG KAHUNA",
+      "KEMOSABE",
+      "SPORT"
+    ],
+    "goofy": [
+      "CHICKEN BUTT",
+      "GOOBER",
+      "NOODLES",
+      "TATER TOT"
+    ]
+  }
+}

@@ -1,6 +1,8 @@
 const log = document.querySelector('#control-log');
 const statusEl = document.querySelector('[data-status]');
 const statusDetailsEl = document.querySelector('[data-status-details]');
+const greetingPoolSelect = document.querySelector('[data-greeting-pool]');
+const greetingPoolForm = document.querySelector('[data-greeting-pool-form]');
 
 async function postJson(endpoint, data = {}) {
   const response = await fetch(endpoint, {
@@ -87,6 +89,7 @@ function renderStatusDetails(data) {
   if (!statusDetailsEl) return;
 
   const chat = data.chat || {};
+  const greetings = data.greetings || {};
   const obs = data.obs || {};
   const sockets = data.sockets || {};
   const items = [
@@ -106,6 +109,7 @@ function renderStatusDetails(data) {
     ['Commands error', formatStatusValue(chat.commandsLastError)],
     ['Messages', formatStatusValue(chat.messageCount)],
     ['Last command', formatDateValue(chat.lastCommandAt)],
+    ['Greeting theme', formatStatusValue(greetings.activePool)],
     ['Rewards enabled', formatStatusValue(chat.rewardsEnabled)],
     ['Redemptions', formatStatusValue(chat.redemptionCount)],
     ['Redemption handlers', formatStatusValue(chat.redemptionHandlerCount)],
@@ -120,6 +124,26 @@ function renderStatusDetails(data) {
   statusDetailsEl.innerHTML = items.map(([label, value]) => (
     `<div class="status-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
   )).join('');
+}
+
+async function refreshGreetings() {
+  if (!greetingPoolSelect) return;
+
+  try {
+    const response = await fetch('/api/v1/greetings');
+    const data = await response.json();
+    const greetings = data.greetings || {};
+    const pools = greetings.pools || [];
+
+    greetingPoolSelect.innerHTML = pools.map(pool => (
+      `<option value="${escapeHtml(pool.name)}">${escapeHtml(pool.name)} (${escapeHtml(pool.count)})</option>`
+    )).join('');
+    greetingPoolSelect.value = greetings.activePool || (pools[0] && pools[0].name) || '';
+    greetingPoolSelect.disabled = !pools.length;
+  } catch (error) {
+    greetingPoolSelect.innerHTML = '<option value="">Unavailable</option>';
+    greetingPoolSelect.disabled = true;
+  }
 }
 
 async function refreshStatus() {
@@ -172,6 +196,20 @@ document.querySelectorAll('[data-refresh-status]').forEach(button => {
   button.addEventListener('click', refreshStatus);
 });
 
+if (greetingPoolForm) {
+  greetingPoolForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const payload = await postJson('/api/v1/greetings/pool', formDataToJson(greetingPoolForm));
+      writeLog(payload);
+      refreshGreetings();
+      refreshStatus();
+    } catch (error) {
+      writeLog(error.message);
+    }
+  });
+}
+
 document.querySelectorAll('[data-clear-log]').forEach(button => {
   button.addEventListener('click', () => {
     log.textContent = '';
@@ -182,4 +220,5 @@ socket.on('connect', refreshStatus);
 socket.on('disconnect', refreshStatus);
 
 refreshStatus();
+refreshGreetings();
 setInterval(refreshStatus, 5000);

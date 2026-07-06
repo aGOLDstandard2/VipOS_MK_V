@@ -13,6 +13,7 @@ const path = require('path')
 
 const { createActionRunner, validateSoundSrc } = require('./modules/actions')
 const { createChatService } = require('./modules/chat')
+const { createGreetingService } = require('./modules/greetings')
 const { createObsService } = require('./modules/obs')
 
 const PORT = Number(process.env.PORT) || 5000
@@ -39,7 +40,8 @@ const io = new Server(server, {
 })
 
 const obs = createObsService()
-const actions = createActionRunner({ io, obs })
+const greetings = createGreetingService()
+const actions = createActionRunner({ io, obs, greetings })
 const chat = createChatService({ actions })
 actions.setChatService(chat)
 
@@ -182,11 +184,22 @@ app.get('/api/v1/status', (req, res) => {
     },
     obs: obs.getStatus(),
     chat: chat.getStatus(),
+    greetings: greetings.getStatus(),
     sockets: {
       clients: io.engine.clientsCount
     }
   })
 })
+
+app.get('/api/v1/greetings', (req, res) => {
+  res.json({ ok: true, greetings: greetings.getStatus() })
+})
+
+app.post('/api/v1/greetings/pool', asyncHandler(async (req, res) => {
+  const pool = req.body.pool || req.body.theme || req.body.activePool
+  if (!pool) return res.status(400).json({ error: 'pool is required' })
+  res.json({ ok: true, greetings: greetings.setActivePool(pool) })
+}))
 
 app.post('/api/v1/bg-alert', asyncHandler(async (req, res) => {
   const results = await actions.run([

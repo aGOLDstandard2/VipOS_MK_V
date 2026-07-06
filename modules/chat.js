@@ -24,6 +24,7 @@ function createChatService({ actions, logger = console } = {}) {
   let api = null
   let authProvider = null
   let automaticRedemptionHandlers = []
+  let chatEntryHandlers = []
   let commandMap = new Map()
   let commandWatcherStarted = false
   let commands = []
@@ -42,6 +43,7 @@ function createChatService({ actions, logger = console } = {}) {
   let shouldRun = false
   let started = false
   let starting = false
+  const seenChatEntrants = new Set()
 
   const state = {
     enabled: config.enabled,
@@ -59,10 +61,15 @@ function createChatService({ actions, logger = console } = {}) {
     commandsLastError: null,
     commandsPath: relativePath(config.commandsFile),
     automaticRedemptionHandlerCount: 0,
+    chatEntryCount: 0,
+    chatEntryHandlerCount: 0,
     communityEventCount: 0,
     communityEventHandlerCount: 0,
     followHandlerCount: 0,
     lastCommandAt: null,
+    lastChatEntry: null,
+    lastChatEntryAt: null,
+    lastChatEntryMatchedHandlers: 0,
     lastCommunityEvent: null,
     lastCommunityEventAt: null,
     lastCommunityEventMatchedHandlers: 0,
@@ -455,10 +462,29 @@ function createChatService({ actions, logger = console } = {}) {
       await runHighlightAlert(context)
     }
 
+    const chatEntryKey = getPrivilegedChatEntryKey(context, chatEntryHandlers, seenChatEntrants)
+    if (chatEntryKey) {
+      seenChatEntrants.add(chatEntryKey)
+      try {
+        await handleChatEntry(context)
+      } catch (error) {
+        seenChatEntrants.delete(chatEntryKey)
+        throw error
+      }
+    }
+
     const commandMatch = findCommand(context.message)
     if (!commandMatch) return
 
     await runCommand(commandMatch, context)
+  }
+
+  async function handleChatEntry(messageContext) {
+    const context = createChatEntryContext(messageContext)
+    state.chatEntryCount += 1
+    state.lastChatEntryAt = new Date().toISOString()
+    state.lastChatEntry = summarizeChatEntryContext(context)
+    state.lastChatEntryMatchedHandlers = await runConfiguredHandlers(chatEntryHandlers, context)
   }
 
   async function handleRedemption(eventName, event) {
@@ -599,6 +625,7 @@ function createChatService({ actions, logger = console } = {}) {
     if (!fs.existsSync(config.commandsFile)) {
       commands = []
       commandMap = new Map()
+      chatEntryHandlers = []
       followHandlers = []
       raidHandlers = []
       redemptionHandlers = []
@@ -606,6 +633,7 @@ function createChatService({ actions, logger = console } = {}) {
       automaticRedemptionHandlers = []
       rewardEventHandlers = []
       state.commandCount = 0
+      state.chatEntryHandlerCount = 0
       state.communityEventHandlerCount = 0
       state.followHandlerCount = 0
       state.raidHandlerCount = 0
@@ -623,6 +651,7 @@ function createChatService({ actions, logger = console } = {}) {
       const automationConfig = normalizeAutomationConfig(parsed)
       const nextCommands = automationConfig.commands.map(command => normalizeCommand(command, config.commandPrefix)).filter(Boolean)
       const nextCommandMap = new Map()
+      const nextChatEntryHandlers = automationConfig.chatEntries.map(handler => normalizeActionHandler(handler, 'chat.entry')).filter(Boolean)
       const nextFollowHandlers = automationConfig.follows.map(handler => normalizeActionHandler(handler, 'follow.add')).filter(Boolean)
       const nextRaidHandlers = automationConfig.raids.map(handler => normalizeActionHandler(handler, 'raid.add')).filter(Boolean)
       const nextRedemptionHandlers = automationConfig.redemptions.map(handler => normalizeActionHandler(handler, 'redemption.add')).filter(Boolean)
@@ -639,6 +668,7 @@ function createChatService({ actions, logger = console } = {}) {
 
       commands = nextCommands
       commandMap = nextCommandMap
+      chatEntryHandlers = nextChatEntryHandlers
       followHandlers = nextFollowHandlers
       raidHandlers = nextRaidHandlers
       redemptionHandlers = nextRedemptionHandlers
@@ -646,9 +676,10 @@ function createChatService({ actions, logger = console } = {}) {
       automaticRedemptionHandlers = nextAutomaticRedemptionHandlers
       rewardEventHandlers = nextRewardEventHandlers
       state.commandCount = commandMap.size
+      state.chatEntryHandlerCount = chatEntryHandlers.length
       state.followHandlerCount = followHandlers.length
       state.raidHandlerCount = raidHandlers.length
-      state.communityEventHandlerCount = followHandlers.length + raidHandlers.length
+      state.communityEventHandlerCount = chatEntryHandlers.length + followHandlers.length + raidHandlers.length
       state.redemptionHandlerCount = redemptionHandlers.length
       state.redemptionUpdateHandlerCount = redemptionUpdateHandlers.length
       state.automaticRedemptionHandlerCount = automaticRedemptionHandlers.length
@@ -886,6 +917,28 @@ function createMessageContext(event, state) {
   }
 }
 
+function createChatEntryContext(context) {
+  const entryRoles = getPrivilegedEntryRoles(context.roles)
+  const role = entryRoles[0] || ''
+
+  return {
+    ...context,
+    chat: {
+      ...context.chat,
+      entryRoles,
+      role
+    },
+    entry: {
+      firstSeenAt: new Date().toISOString(),
+      roles: entryRoles,
+      role
+    },
+    event: 'chat.entry',
+    message: `${context.displayName} entered chat`,
+    source: 'chat-entry'
+  }
+}
+
 function createRedemptionContext(eventName, event) {
   const input = event.input || ''
   const redeemedAt = dateToIso(event.redemptionDate)
@@ -1069,6 +1122,16 @@ function summarizeCommunityEventContext(context) {
   }
 }
 
+function summarizeChatEntryContext(context) {
+  return {
+    displayName: context.displayName,
+    event: context.event,
+    roles: context.entry.roles,
+    user: context.user,
+    userId: context.userId
+  }
+}
+
 function getRoles({ badges, broadcasterId, chatterId }) {
   const roles = new Set(['everyone'])
 
@@ -1082,6 +1145,22 @@ function getRoles({ badges, broadcasterId, chatterId }) {
   }
 
   return [...roles]
+}
+
+function getPrivilegedChatEntryKey(context, handlers, seenEntrants) {
+  if (!handlers.length) return null
+  const entryRoles = getPrivilegedEntryRoles(context.roles)
+  if (!entryRoles.length) return null
+
+  const userKey = context.userId || normalizeLogin(context.username || context.user)
+  if (!userKey || seenEntrants.has(userKey)) return null
+
+  return userKey
+}
+
+function getPrivilegedEntryRoles(roles) {
+  const actual = new Set((roles || []).map(normalizeRole))
+  return ['moderator', 'vip'].filter(role => actual.has(role))
 }
 
 function isAllowedRole(allowedRoles, actualRoles) {
@@ -1115,6 +1194,7 @@ function matchesHandler(handler, context) {
   const username = normalizeMatchValue(context.username || context.user)
   const displayName = normalizeMatchValue(context.displayName)
   const input = normalizeMatchValue(context.input || context.message)
+  const actualRoles = new Set((context.roles || []).map(normalizeRole))
   const viewerCount = Number(context.viewers || (context.raid && context.raid.viewers) || 0)
 
   if (handler.rewardIds.length && !handler.rewardIds.includes(rewardId)) return false
@@ -1123,6 +1203,7 @@ function matchesHandler(handler, context) {
   if (handler.statuses.length && !handler.statuses.includes(status)) return false
   if (handler.userIds.length && !handler.userIds.includes(userId)) return false
   if (handler.usernames.length && !handler.usernames.includes(username) && !handler.usernames.includes(displayName)) return false
+  if (handler.roles.length && !handler.roles.some(role => actualRoles.has(role))) return false
   if (handler.inputContains.length && !handler.inputContains.some(value => input.includes(value))) return false
   if (handler.inputPatterns.length && !handler.inputPatterns.some(pattern => testRegex(pattern, context.input || context.message || ''))) return false
   if (handler.minViewers !== null && viewerCount < handler.minViewers) return false
@@ -1155,6 +1236,7 @@ function normalizeAutomationConfig(parsed) {
   if (Array.isArray(parsed)) {
     return {
       automaticRedemptions: [],
+      chatEntries: [],
       commands: parsed,
       follows: [],
       raids: [],
@@ -1170,6 +1252,7 @@ function normalizeAutomationConfig(parsed) {
 
   return {
     automaticRedemptions: asArray(parsed.automaticRedemptions || parsed.automaticRewards),
+    chatEntries: asArray(parsed.chatEntries || parsed.chatEntrants || parsed.entries || parsed.entryAlerts),
     commands: asArray(parsed.commands),
     follows: asArray(parsed.follows || parsed.followers || parsed.followEvents),
     raids: asArray(parsed.raids || parsed.raidEvents),
@@ -1216,6 +1299,7 @@ function normalizeActionHandler(handler, defaultEvent) {
   const inputPatterns = normalizeRegexList(match.inputMatches || match.messageMatches || match.inputPattern || handler.inputMatches || handler.messageMatches || handler.inputPattern)
   const minViewers = numberOrNull(match.minViewers || match.minimumViewers || handler.minViewers || handler.minimumViewers)
   const maxViewers = numberOrNull(match.maxViewers || match.maximumViewers || handler.maxViewers || handler.maximumViewers)
+  const roles = normalizeRoles(match.role || match.roles || handler.role || handler.roles)
   const name = normalizeMatchValue(match.name || handler.name)
   const keyParts = [
     events.join(',') || defaultEvent || 'reward',
@@ -1226,6 +1310,7 @@ function normalizeActionHandler(handler, defaultEvent) {
     statuses.join(','),
     userIds.join(','),
     usernames.join(','),
+    roles.join(','),
     inputContains.join(','),
     inputPatterns.map(pattern => pattern.source).join(','),
     minViewers === null ? '' : `min${minViewers}`,
@@ -1246,6 +1331,7 @@ function normalizeActionHandler(handler, defaultEvent) {
     rewardIds,
     rewardTitles,
     rewardTypes,
+    roles,
     statuses,
     userIds,
     usernames
@@ -1260,8 +1346,7 @@ function normalizeCommandName(name, commandPrefix) {
 }
 
 function normalizeRoles(roles) {
-  if (!Array.isArray(roles)) return []
-  return roles.map(normalizeRole).filter(Boolean)
+  return asArray(roles).map(normalizeRole).filter(Boolean)
 }
 
 function normalizeMatchList(value) {
@@ -1302,6 +1387,10 @@ function normalizeEventName(value) {
     automatic: 'automatic-redemption.add',
     automaticRedemption: 'automatic-redemption.add',
     automaticredemption: 'automatic-redemption.add',
+    chatEntry: 'chat.entry',
+    chatentry: 'chat.entry',
+    enter: 'chat.entry',
+    entry: 'chat.entry',
     follow: 'follow.add',
     followed: 'follow.add',
     follower: 'follow.add',
@@ -1324,7 +1413,8 @@ function normalizeRole(role) {
     mod: 'moderator',
     mods: 'moderator',
     sub: 'subscriber',
-    subs: 'subscriber'
+    subs: 'subscriber',
+    vips: 'vip'
   }
 
   return aliases[normalized] || normalized

@@ -43,17 +43,19 @@ bits:read channel:read:redemptions channel:manage:redemptions channel:read:polls
 - `redemptionUpdates`
 - `automaticRedemptions`
 - `rewardEvents`
+- `chatEntries`
 - `follows`
 - `raids`
 
 Reward action templates can use values like `{displayName}`, `{message}`, `{reward.title}`, `{reward.id}`, `{reward.cost}`, `{redemption.input}`, and `{automaticReward.type}`.
 `sound.pickRandom` adds the picked file to the action context, so later actions can use `{sfx.src}`, `{sfx.filename}`, `{sfx.name}`, and `{sfx.text}` when the `contextKey` is `sfx`.
+`context.pickRandom` picks one item from the active pool in `config/greetings.json` by default and stores it at `contextKey`, so a later action can use it in templates like `{greeting}`. It can also pick from an inline `items` list, a custom `file`, or a fixed `pool`/`theme`.
 
 For normal channel point usage, use `redemptions`; Twitch calls this event `redemption.add` because a viewer has added a new redemption. `redemptionUpdates`, `automaticRedemptions`, and `rewardEvents` are optional advanced handler groups, and the service only subscribes to those extra EventSub topics when handlers are configured for them at startup.
 
-Follow and raid interactions are configured with `follows` and `raids`. Follow handlers require the broadcaster token to include `moderator:read:followers`; raid handlers do not require an extra Twitch scope. The service only subscribes to these EventSub topics when handlers are configured at startup.
+Chat entry, follow, and raid interactions are configured with `chatEntries`, `follows`, and `raids`. Chat entry handlers fire once per bot session when the first chat message seen from a moderator or VIP arrives; Twitch chat messages do not expose silent joins. Follow handlers require the broadcaster token to include `moderator:read:followers`; raid handlers do not require an extra Twitch scope. The service only subscribes to follow and raid EventSub topics when handlers are configured at startup.
 
-Follow templates can use `{displayName}`, `{username}`, `{follow.followedAt}`, and broadcaster fields like `{broadcasterDisplayName}`. Raid templates can use `{displayName}`, `{username}`, `{raid.viewers}`, `{raid.fromBroadcasterName}`, and `{raid.toBroadcasterName}`.
+Chat entry templates can use `{displayName}`, `{username}`, `{entry.role}`, and `{entry.roles}`. Follow templates can use `{displayName}`, `{username}`, `{follow.followedAt}`, and broadcaster fields like `{broadcasterDisplayName}`. Raid templates can use `{displayName}`, `{username}`, `{raid.viewers}`, `{raid.fromBroadcasterName}`, and `{raid.toBroadcasterName}`.
 
 Redemption handlers can be catch-all, or they can include a `match` object:
 
@@ -83,7 +85,7 @@ Redemption handlers can be catch-all, or they can include a `match` object:
 }
 ```
 
-Supported `match` fields include `event`, `rewardId`, `rewardTitle`, `rewardType`, `status`, `userId`, `username`, `displayName`, `inputContains`, and `inputMatches`.
+Supported `match` fields include `event`, `rewardId`, `rewardTitle`, `rewardType`, `status`, `userId`, `username`, `displayName`, `roles`, `inputContains`, and `inputMatches`.
 Raid handlers also support `minViewers` and `maxViewers`.
 
 Use `status` only when you intentionally want to separate queued/manual reward states like `unfulfilled`, `fulfilled`, or `canceled`.
@@ -91,6 +93,7 @@ Use `status` only when you intentionally want to separate queued/manual reward s
 Action types currently supported:
 - `overlay.alert`
 - `overlay.emit`
+- `context.pickRandom`
 - `sound.play`
 - `sound.pickRandom`
 - `obs.scene`
@@ -102,3 +105,4 @@ Action types currently supported:
 - `log`
 
 `sound.pickRandom` chooses from top-level `.mp3`, `.ogg`, and `.wav` files in `public/assets/sounds`; subdirectories are ignored. Edit `config/sfx-text.json` to control the overlay text for each filename.
+Edit `config/greetings.json` to control the themed text pools used by `context.pickRandom`. The control panel can switch the active greeting theme, which is saved in `config/greetings-settings.json`.

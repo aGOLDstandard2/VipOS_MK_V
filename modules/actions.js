@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { createGreetingService } = require('./greetings')
 
 const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', 'sounds')
 const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.json')
@@ -28,6 +29,7 @@ function createActionRunner({
   io,
   obs,
   logger = console,
+  greetings = createGreetingService({ logger }),
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
   soundTextFile = DEFAULT_SOUND_TEXT_FILE
 }) {
@@ -109,6 +111,25 @@ function createActionRunner({
         setPath(context, contextKey, pickedSound)
 
         return { type, contextKey, ...pickedSound }
+      }
+
+      case 'context.pickRandom': {
+        const contextKey = hydrate(action.contextKey || action.key, context)
+        if (!isSafeContextPath(contextKey)) {
+          throw userInputError('context.pickRandom requires a safe contextKey')
+        }
+
+        const configuredItems = action.items || action.values || action.list
+        const picked = configuredItems
+          ? pickInlineItem(hydrate(asArray(configuredItems), context))
+          : greetings.pick({
+            file: hydrate(action.file || action.path, context),
+            pool: hydrate(action.pool || action.theme || action.category, context)
+          })
+        const value = picked.value
+        setPath(context, contextKey, value)
+
+        return { type, contextKey, ...picked }
       }
 
       case 'chat.say': {
@@ -269,6 +290,20 @@ function getSoundText(src, textMap) {
   const mappedText = textMap[src]
   if (mappedText !== undefined && mappedText !== null && String(mappedText).trim()) return String(mappedText)
   return path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim()
+}
+
+function asArray(value) {
+  if (value === undefined || value === null || value === '') return []
+  return Array.isArray(value) ? value : [value]
+}
+
+function pickInlineItem(value) {
+  const items = asArray(value).map(item => String(item || '').trim()).filter(Boolean)
+  if (!items.length) throw userInputError('context.pickRandom requires at least one item')
+  return {
+    pool: 'inline',
+    value: items[Math.floor(Math.random() * items.length)]
+  }
 }
 
 function parseToggle(value) {
