@@ -52,7 +52,7 @@ const actionQueue = createActionQueue({
   soundCompletionFallbackMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
 })
 const macros = createMacroService()
-const chat = createChatService({ actions })
+const chat = createChatService({ actions, actionQueue })
 actions.setChatService(chat)
 
 

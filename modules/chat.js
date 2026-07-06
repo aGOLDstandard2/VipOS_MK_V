@@ -15,7 +15,7 @@ const FOLLOW_SCOPES = ['moderator:read:followers']
 
 let twurpleModules = null
 
-function createChatService({ actions, logger = console } = {}) {
+function createChatService({ actions, actionQueue = null, logger = console } = {}) {
   if (!actions) throw new Error('Chat service requires an action runner')
 
   const config = readConfig()
@@ -549,7 +549,7 @@ function createChatService({ actions, logger = console } = {}) {
 
     state.lastCommandAt = new Date().toISOString()
     logger.log(`Twitch command ${commandName} from ${commandContext.displayName}`)
-    await actions.run(command.actions, commandContext)
+    await runTwitchActions(`Twitch Command ${commandName}`, command.actions, commandContext)
   }
 
   async function runConfiguredHandlers(handlers, context) {
@@ -560,7 +560,7 @@ function createChatService({ actions, logger = console } = {}) {
       if (isCoolingDown(handler, context)) continue
       matchedCount += 1
       logger.log(`Twitch ${context.event} action for ${context.displayName || context.reward.title}`)
-      await actions.run(handler.actions, context)
+      await runTwitchActions(formatHandlerQueueName(handler, context), handler.actions, context)
     }
 
     return matchedCount
@@ -582,7 +582,24 @@ function createChatService({ actions, logger = console } = {}) {
       })
     }
 
-    await actions.run(actionList, context)
+    await runTwitchActions('Twitch Highlight Alert', actionList, context)
+  }
+
+  async function runTwitchActions(name, actionList, context) {
+    if (!actionQueue) return actions.run(actionList, context)
+
+    return actionQueue.enqueue({
+      name,
+      actions: actionList,
+      context,
+      source: context.source || 'twitch'
+    })
+  }
+
+  function formatHandlerQueueName(handler, context) {
+    const parts = ['Twitch', context.event || 'event']
+    if (handler.name) parts.push(handler.name)
+    return parts.join(' ')
   }
 
   function findCommand(message) {
