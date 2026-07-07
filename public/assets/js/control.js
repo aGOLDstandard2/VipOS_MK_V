@@ -6,6 +6,8 @@ const greetingPoolForm = document.querySelector('[data-greeting-pool-form]');
 const macroListEl = document.querySelector('[data-macro-list]');
 const queueStatusEl = document.querySelector('[data-queue-status]');
 const queueActivityEl = document.querySelector('[data-queue-activity]');
+const soundInputEl = document.querySelector('[data-sound-input]');
+const soundListEl = document.querySelector('[data-sound-list]');
 const obsSceneSelect = document.querySelector('[data-obs-scenes]');
 const obsSourceSceneSelect = document.querySelector('[data-obs-source-scenes]');
 const obsSourceSelect = document.querySelector('[data-obs-sources]');
@@ -97,6 +99,16 @@ function formatTimeValue(value) {
   if (!value) return '';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleTimeString();
+}
+
+function formatDurationMs(durationMs) {
+  const duration = Number(durationMs || 0);
+  if (!Number.isFinite(duration) || duration <= 0) return 'unknown';
+
+  const totalSeconds = Math.round(duration / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function escapeHtml(value) {
@@ -276,6 +288,31 @@ async function refreshQueue() {
   } catch (error) {
     renderQueue(null);
   }
+}
+
+async function refreshSounds() {
+  if (!soundInputEl || !soundListEl) return;
+
+  try {
+    const data = await getJson('/api/v1/sounds');
+    const sounds = data.sounds || [];
+    soundListEl.innerHTML = sounds.map(sound => (
+      `<option value="${escapeHtml(sound.src)}" label="${escapeHtml(formatSoundLabel(sound))}"></option>`
+    )).join('');
+    soundInputEl.placeholder = sounds.length ? `Search ${sounds.length} sounds...` : 'No sounds found';
+  } catch (error) {
+    soundInputEl.placeholder = 'Sound browser unavailable';
+    soundListEl.innerHTML = '';
+  }
+}
+
+function formatSoundLabel(sound) {
+  const details = [
+    formatDurationMs(sound.durationMs),
+    sound.directory || '',
+    sound.extension ? sound.extension.toUpperCase() : ''
+  ].filter(Boolean).join(' / ');
+  return details ? `${sound.src} - ${details}` : sound.src;
 }
 
 function renderMacros(macros) {
@@ -481,5 +518,6 @@ refreshStatus();
 refreshGreetings();
 refreshMacros();
 refreshQueue();
+refreshSounds();
 refreshObsDiscovery();
 setInterval(refreshStatus, 5000);

@@ -95,7 +95,8 @@
       <form data-json-form data-endpoint="/api/v1/sound">
         <label for="sound-src">Sound path</label>
         <div class="control-row">
-          <input id="sound-src" name="src" type="text" placeholder="kitt_scanner.mp3" autocomplete="off" />
+          <input id="sound-src" name="src" type="text" placeholder="Loading sounds..." autocomplete="off" list="sound-browser" data-sound-input />
+          <datalist id="sound-browser" data-sound-list></datalist>
           <input name="volume" type="number" min="0" max="1" step="0.05" value="1" aria-label="Volume" />
           <button type="submit">Play</button>
         </div>

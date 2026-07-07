@@ -11,7 +11,7 @@ const cors = require('cors')
 const favicon = require('serve-favicon')
 const path = require('path')
 
-const { createActionRunner, validateSoundSrc } = require('./modules/actions')
+const { createActionRunner, listSoundFiles, validateSoundSrc } = require('./modules/actions')
 const { createActionQueue } = require('./modules/action-queue')
 const { createChatService } = require('./modules/chat')
 const { createGreetingService } = require('./modules/greetings')
@@ -238,6 +238,10 @@ app.get('/api/v1/macros', (req, res) => {
 
 app.get('/api/v1/queue', (req, res) => {
   res.json({ ok: true, queue: actionQueue.getStatus() })
+})
+
+app.get('/api/v1/sounds', (req, res) => {
+  res.json({ ok: true, sounds: listSoundFiles() })
 })
 
 app.post('/api/v1/twitch/simulate/:type', asyncHandler(async (req, res) => {

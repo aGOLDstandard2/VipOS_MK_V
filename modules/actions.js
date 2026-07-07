@@ -26,6 +26,15 @@ function validateSoundSrc(src) {
   return normalized
 }
 
+function listSoundFiles({
+  soundDirectory = DEFAULT_SOUND_DIRECTORY,
+  logger = console
+} = {}) {
+  const sounds = []
+  collectSoundFiles(soundDirectory, '', sounds, logger)
+  return sounds.sort((a, b) => a.src.localeCompare(b.src))
+}
+
 function createActionRunner({
   io,
   obs,
@@ -294,6 +303,42 @@ function getSoundText(src, textMap) {
   return path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim()
 }
 
+function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger) {
+  const directory = path.join(soundDirectory, relativeDirectory)
+  let entries
+
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true })
+  } catch (error) {
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(`Failed to read sound directory ${directory}: ${error.message}`)
+    }
+    return
+  }
+
+  for (const entry of entries) {
+    const relativePath = relativeDirectory ? path.join(relativeDirectory, entry.name) : entry.name
+    const src = relativePath.replace(/\\/g, '/')
+
+    if (entry.isDirectory()) {
+      collectSoundFiles(soundDirectory, relativePath, sounds, logger)
+    } else if (entry.isFile() && validateSoundSrc(src)) {
+      const filePath = path.join(soundDirectory, relativePath)
+      const stat = fs.statSync(filePath)
+      const durationMs = getSoundDurationMs(src, soundDirectory, logger)
+      sounds.push({
+        directory: path.dirname(src) === '.' ? '' : path.dirname(src),
+        durationMs,
+        extension: path.extname(src).slice(1).toLowerCase(),
+        filename: entry.name,
+        name: path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim(),
+        sizeBytes: stat.size,
+        src
+      })
+    }
+  }
+}
+
 function getSoundDurationMs(src, soundDirectory, logger = console) {
   const filePath = resolveSoundPath(src, soundDirectory)
   if (!filePath) return null
@@ -348,5 +393,6 @@ function clamp(value, min, max) {
 
 module.exports = {
   createActionRunner,
+  listSoundFiles,
   validateSoundSrc
 }
