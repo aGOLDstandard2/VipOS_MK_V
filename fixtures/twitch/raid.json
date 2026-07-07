@@ -1,9 +1,9 @@
 {
-  "raidedBroadcasterDisplayName": "ViperOS",
-  "raidedBroadcasterId": "100001",
-  "raidedBroadcasterName": "viperos",
-  "raidingBroadcasterDisplayName": "RaidLead",
+  "raidedBroadcasterDisplayName": "vipertronnx",
+  "raidedBroadcasterId": "987654321",
+  "raidedBroadcasterName": "vipertronnx",
+  "raidingBroadcasterDisplayName": "Raid User",
   "raidingBroadcasterId": "300001",
-  "raidingBroadcasterName": "raidlead",
+  "raidingBroadcasterName": "raiduser",
   "viewers": 30
 }
