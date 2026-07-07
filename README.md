@@ -20,6 +20,8 @@ The Sound control searches local `.mp3`, `.ogg`, and `.wav` files under `public/
 
 Macros, standard control-panel actions, and Twitch-triggered actions run through the action queue so common stream moments do not stack alerts or OBS actions on top of each other. The queue can be paused, resumed, skipped, or cleared from the control panel, and the queue activity log shows recent queued, started, completed, failed, skipped, cleared, paused, and resumed events.
 
+Quiet Mode can be toggled from the control panel or with `POST /api/v1/quiet-mode/on`, `POST /api/v1/quiet-mode/off`, and `POST /api/v1/quiet-mode/toggle`. When enabled, viewer-triggered Twitch/chat alert and sound actions are suppressed while manual API actions and OBS controls remain available.
+
 Use `POST /api/v1/actions/enqueue` to queue custom actions. Use `POST /api/v1/actions/run` only when you intentionally need to bypass the queue and run actions immediately.
 
 Queued sound actions use the local audio file duration to keep the item running until the effect should be finished. `sound.play` returns the detected `durationMs`, and the queue waits for the longest sound in the action results plus `QUEUE_SOUND_COMPLETION_BUFFER_MS`, defaulting to `250`. If a duration cannot be read, the queue falls back to `QUEUE_SOUND_COMPLETION_DELAY_MS`, defaulting to `4000`. Request bodies or macros may override automatic timing with `completionDelayMs`, `delayMs`, or `queueDelayMs`.

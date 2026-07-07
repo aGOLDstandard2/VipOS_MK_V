@@ -28,6 +28,7 @@ const ALLOWED_ORIGINS = new Set([
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`
 ])
+const quietMode = createQuietMode()
 
 const io = new Server(server, {
   allowRequest(req, callback) {
@@ -45,7 +46,7 @@ const io = new Server(server, {
 
 const obs = createObsService()
 const greetings = createGreetingService()
-const actions = createActionRunner({ io, obs, greetings })
+const actions = createActionRunner({ io, obs, greetings, quietMode })
 const actionQueue = createActionQueue({
   actions,
   soundCompletionBufferMs: SOUND_COMPLETION_BUFFER_MS,
@@ -114,6 +115,33 @@ function normalizeCompletionDelay(value) {
   const delay = Number(value || 0)
   if (!Number.isFinite(delay) || delay <= 0) return 0
   return Math.min(Math.round(delay), 10 * 60 * 1000)
+}
+
+function createQuietMode() {
+  let enabled = false
+  let updatedAt = null
+
+  function set(nextEnabled) {
+    enabled = Boolean(nextEnabled)
+    updatedAt = new Date().toISOString()
+    return getStatus()
+  }
+
+  function getStatus() {
+    return {
+      enabled,
+      updatedAt
+    }
+  }
+
+  return {
+    disable: () => set(false),
+    enable: () => set(true),
+    getStatus,
+    isEnabled: () => enabled,
+    set,
+    toggle: () => set(!enabled)
+  }
 }
 
 function numberOrDefault(value, defaultValue) {
@@ -225,6 +253,7 @@ app.get('/api/v1/status', (req, res) => {
     obs: obs.getStatus(),
     chat: chat.getStatus(),
     greetings: greetings.getStatus(),
+    quietMode: quietMode.getStatus(),
     queue: actionQueue.getStatus(),
     sockets: {
       clients: io.engine.clientsCount
@@ -238,6 +267,18 @@ app.get('/api/v1/macros', (req, res) => {
 
 app.get('/api/v1/queue', (req, res) => {
   res.json({ ok: true, queue: actionQueue.getStatus() })
+})
+
+app.post('/api/v1/quiet-mode/on', (req, res) => {
+  res.json({ ok: true, quietMode: quietMode.enable() })
+})
+
+app.post('/api/v1/quiet-mode/off', (req, res) => {
+  res.json({ ok: true, quietMode: quietMode.disable() })
+})
+
+app.post('/api/v1/quiet-mode/toggle', (req, res) => {
+  res.json({ ok: true, quietMode: quietMode.toggle() })
 })
 
 app.get('/api/v1/sounds', (req, res) => {

@@ -40,6 +40,7 @@ function createActionRunner({
   obs,
   logger = console,
   greetings = createGreetingService({ logger }),
+  quietMode = null,
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
   soundTextFile = DEFAULT_SOUND_TEXT_FILE
 }) {
@@ -67,6 +68,10 @@ function createActionRunner({
 
     const type = action.type || action.action
     if (!type) throw new Error('Action type is required')
+
+    if (shouldSuppressAction(type, context, quietMode)) {
+      return { type, suppressed: true, reason: 'quiet-mode' }
+    }
 
     switch (type) {
       case 'delay': {
@@ -267,6 +272,30 @@ function normalizeSoundTextMap(value) {
   return Object.fromEntries(Object.entries(value)
     .filter(([filename, text]) => SOUND_FILE_PATTERN.test(filename) && text !== undefined && text !== null)
     .map(([filename, text]) => [filename, String(text)]))
+}
+
+function shouldSuppressAction(type, context, quietMode) {
+  if (!quietMode || typeof quietMode.isEnabled !== 'function' || !quietMode.isEnabled()) return false
+  if (!isViewerTriggeredContext(context)) return false
+  return isQuietableAction(type)
+}
+
+function isQuietableAction(type) {
+  return type === 'overlay.alert' || type === 'overlay.emit' || type === 'sound.play' || type === 'sound.pickRandom'
+}
+
+function isViewerTriggeredContext(context = {}) {
+  return [
+    'automatic-redemption',
+    'chat',
+    'chat-entry',
+    'follow',
+    'raid',
+    'redemption',
+    'reward',
+    'subscription',
+    'twitch'
+  ].includes(context.source)
 }
 
 function pickRandomSound({ soundDirectory, textMap = {} }) {

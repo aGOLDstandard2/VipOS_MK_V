@@ -202,6 +202,7 @@ function renderStatusDetails(data) {
   const chat = data.chat || {};
   const greetings = data.greetings || {};
   const obs = data.obs || {};
+  const quietMode = data.quietMode || {};
   const sockets = data.sockets || {};
   const items = [
     ['OBS enabled', formatStatusValue(obs.enabled)],
@@ -227,6 +228,8 @@ function renderStatusDetails(data) {
     ['Reward handlers', formatStatusValue(chat.rewardEventHandlerCount)],
     ['Follows', formatStatusValue(chat.followHandlerCount)],
     ['Raids', formatStatusValue(chat.raidHandlerCount)],
+    ['Quiet mode', quietMode.enabled ? 'on' : 'off'],
+    ['Quiet updated', formatDateValue(quietMode.updatedAt)],
     ['Reward error', formatStatusValue(chat.rewardsLastError)],
     ['Chat error', formatStatusValue(chat.lastError)],
     ['Socket clients', formatStatusValue(sockets.clients)]
@@ -262,11 +265,13 @@ async function refreshStatus() {
     const response = await fetch('/api/v1/status');
     const data = await response.json();
     const chatLabel = data.chat.connected ? 'Chat online' : (data.chat.enabled ? 'Chat offline' : 'Chat disabled');
+    const quietMode = data.quietMode || {};
     const socketCount = data.sockets.clients || 0;
 
     statusEl.innerHTML = [
       statusBadge(data.obs.identified ? 'OBS online' : 'OBS offline', data.obs.identified),
       statusBadge(chatLabel, data.chat.connected),
+      statusBadge(quietMode.enabled ? 'Quiet mode on' : 'Quiet mode off', !quietMode.enabled),
       `<span class="status-pill">${socketCount} socket${socketCount === 1 ? '' : 's'}</span>`
     ].join('');
     renderStatusDetails(data);
