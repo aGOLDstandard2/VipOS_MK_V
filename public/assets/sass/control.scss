@@ -163,6 +163,75 @@ body.control-page {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+#control-panel .queue-activity {
+  background: #0b0d10;
+  border: 1px solid #222a33;
+  border-radius: 6px;
+  display: grid;
+  gap: 1px;
+  margin-top: 12px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+#control-panel .queue-activity__item {
+  align-items: flex-start;
+  background: #11161d;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 84px minmax(0, 1fr);
+  padding: 10px 12px;
+}
+
+#control-panel .queue-activity__item time {
+  color: #8f9aaa;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#control-panel .queue-activity__item strong,
+#control-panel .queue-activity__item span,
+#control-panel .queue-activity__item small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#control-panel .queue-activity__item strong {
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#control-panel .queue-activity__item span {
+  color: #d7dde6;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#control-panel .queue-activity__item small,
+#control-panel .queue-activity__empty {
+  color: #8f9aaa;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#control-panel .queue-activity__empty {
+  padding: 12px;
+}
+
+#control-panel .queue-activity__item.is-failed strong {
+  color: #ff8b8b;
+}
+
+#control-panel .queue-activity__item.is-completed strong {
+  color: #7ee787;
+}
+
+#control-panel .queue-activity__item.is-started strong {
+  color: #79c0ff;
+}
+
 #control-panel input,
 #control-panel select,
 #control-panel textarea {

@@ -5,6 +5,7 @@ const greetingPoolSelect = document.querySelector('[data-greeting-pool]');
 const greetingPoolForm = document.querySelector('[data-greeting-pool-form]');
 const macroListEl = document.querySelector('[data-macro-list]');
 const queueStatusEl = document.querySelector('[data-queue-status]');
+const queueActivityEl = document.querySelector('[data-queue-activity]');
 const obsSceneSelect = document.querySelector('[data-obs-scenes]');
 const obsSourceSceneSelect = document.querySelector('[data-obs-source-scenes]');
 const obsSourceSelect = document.querySelector('[data-obs-sources]');
@@ -92,6 +93,12 @@ function formatDateValue(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
 }
 
+function formatTimeValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleTimeString();
+}
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -110,6 +117,7 @@ function renderQueue(queue) {
 
   if (!queue) {
     queueStatusEl.innerHTML = '<div class="status-item"><span>Queue</span><strong>Unavailable</strong></div>';
+    renderQueueActivity(null);
     return;
   }
 
@@ -132,6 +140,48 @@ function renderQueue(queue) {
   ].map(([label, value]) => (
     `<div class="status-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
   )).join('');
+
+  renderQueueActivity(queue.activity || []);
+}
+
+function renderQueueActivity(activity) {
+  if (!queueActivityEl) return;
+
+  if (!activity) {
+    queueActivityEl.innerHTML = '<div class="queue-activity__empty">Queue activity unavailable</div>';
+    return;
+  }
+
+  if (!activity.length) {
+    queueActivityEl.innerHTML = '<div class="queue-activity__empty">No queue activity yet</div>';
+    return;
+  }
+
+  queueActivityEl.innerHTML = activity.slice(0, 20).map(item => {
+    const subject = item.id ? `#${item.id} ${item.name}` : formatQueueEvent(item);
+    const details = [
+      item.source,
+      item.actionCount ? `${item.actionCount} action${item.actionCount === 1 ? '' : 's'}` : '',
+      item.count ? `${item.count} item${item.count === 1 ? '' : 's'}` : '',
+      item.error ? `Error: ${item.error}` : ''
+    ].filter(Boolean).join(' / ');
+
+    return `
+      <div class="queue-activity__item is-${escapeHtml(item.event || 'event')}">
+        <time>${escapeHtml(formatTimeValue(item.timestamp))}</time>
+        <div>
+          <strong>${escapeHtml(formatQueueEvent(item))}</strong>
+          <span>${escapeHtml(subject)}</span>
+          ${details ? `<small>${escapeHtml(details)}</small>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function formatQueueEvent(item) {
+  const event = String(item.event || 'event').replace(/-/g, ' ');
+  return event.charAt(0).toUpperCase() + event.slice(1);
 }
 
 function renderStatusDetails(data) {
