@@ -17,6 +17,7 @@ const { createChatService } = require('./modules/chat')
 const { createGreetingService } = require('./modules/greetings')
 const { createMacroService } = require('./modules/macros')
 const { createObsService } = require('./modules/obs')
+const { createRaffleService } = require('./modules/raffle')
 
 const PORT = Number(process.env.PORT) || 5000
 const APP_NAME = process.env.APP_NAME || 'VipOS MK V'
@@ -53,7 +54,20 @@ const actionQueue = createActionQueue({
   soundCompletionFallbackMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
 })
 const macros = createMacroService()
-const chat = createChatService({ actions, actionQueue })
+const raffle = createRaffleService({
+  announce(actionList, context = {}) {
+    return actionQueue.enqueue({
+      name: 'Raffle',
+      actions: actionList,
+      context,
+      source: 'raffle'
+    })
+  },
+  announceImmediate(actionList, context = {}) {
+    return actions.run(actionList, { ...context, source: 'raffle' })
+  }
+})
+const chat = createChatService({ actions, actionQueue, raffle })
 actions.setChatService(chat)
 
 
@@ -255,6 +269,7 @@ app.get('/api/v1/status', (req, res) => {
     greetings: greetings.getStatus(),
     quietMode: quietMode.getStatus(),
     queue: actionQueue.getStatus(),
+    raffle: raffle.getStatus(),
     sockets: {
       clients: io.engine.clientsCount
     }
@@ -279,6 +294,30 @@ app.post('/api/v1/quiet-mode/off', (req, res) => {
 
 app.post('/api/v1/quiet-mode/toggle', (req, res) => {
   res.json({ ok: true, quietMode: quietMode.toggle() })
+})
+
+app.get('/api/v1/raffle', (req, res) => {
+  res.json({ ok: true, raffle: raffle.getStatus() })
+})
+
+app.post('/api/v1/raffle/on', (req, res) => {
+  res.json({ ok: true, raffle: raffle.enable() })
+})
+
+app.post('/api/v1/raffle/off', (req, res) => {
+  res.json({ ok: true, raffle: raffle.disable() })
+})
+
+app.post('/api/v1/raffle/toggle', (req, res) => {
+  res.json({ ok: true, raffle: raffle.toggle() })
+})
+
+app.post('/api/v1/raffle/start', (req, res) => {
+  res.json({ ok: true, raffle: raffle.start(), queue: actionQueue.getStatus() })
+})
+
+app.post('/api/v1/raffle/close', (req, res) => {
+  res.json({ ok: true, raffle: raffle.close(), queue: actionQueue.getStatus() })
 })
 
 app.get('/api/v1/sounds', (req, res) => {

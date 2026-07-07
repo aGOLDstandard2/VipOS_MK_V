@@ -55,6 +55,24 @@
     <section class="control-section control-section--wide">
       <div class="section-heading">
         <div>
+          <h2>Raffle</h2>
+          <p>Schedule viewer raffles, track entries, winners, and accumulated points.</p>
+        </div>
+        <div class="button-row">
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/raffle/on">Raffle On</button>
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/raffle/off">Raffle Off</button>
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/raffle/start">Start Now</button>
+          <button type="button" class="secondary-button compact-button" data-post="/api/v1/raffle/close">Close Current</button>
+        </div>
+      </div>
+      <div class="raffle-board" data-raffle-status>
+        <div class="status-item">Loading raffle...</div>
+      </div>
+    </section>
+
+    <section class="control-section control-section--wide">
+      <div class="section-heading">
+        <div>
           <h2>Overlay Alerts</h2>
           <p>Trigger text alerts and stream-border states.</p>
         </div>

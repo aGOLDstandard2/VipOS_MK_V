@@ -157,7 +157,8 @@ body.control-page {
 }
 
 #control-panel .macro-grid,
-#control-panel .queue-board {
+#control-panel .queue-board,
+#control-panel .raffle-board {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -416,6 +417,7 @@ body.control-page {
   #control-panel .control-grid,
   #control-panel .macro-grid,
   #control-panel .queue-board,
+  #control-panel .raffle-board,
   #control-panel .status-grid {
     grid-template-columns: 1fr;
   }

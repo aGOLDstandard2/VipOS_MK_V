@@ -16,7 +16,7 @@ const SUBSCRIPTION_SCOPES = ['channel:read:subscriptions']
 
 let twurpleModules = null
 
-function createChatService({ actions, actionQueue = null, logger = console } = {}) {
+function createChatService({ actions, actionQueue = null, logger = console, raffle = null } = {}) {
   if (!actions) throw new Error('Chat service requires an action runner')
 
   const config = readConfig()
@@ -503,6 +503,8 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
         throw error
       }
     }
+
+    if (raffle && await raffle.handleChatMessage(context)) return
 
     const commandMatch = findCommand(context.message)
     if (!commandMatch) return

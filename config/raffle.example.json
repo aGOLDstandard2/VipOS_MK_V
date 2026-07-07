@@ -1,0 +1,20 @@
+{
+  "enabled": false,
+  "settings": {
+    "entryCommand": "!join",
+    "pointsCommand": "!points",
+    "countdownIntervalMs": 20000,
+    "entryWindowMs": 120000,
+    "minDelayMs": 300000,
+    "maxDelayMs": 600000,
+    "winPoints": 1,
+    "maxHistory": 50
+  },
+  "totals": {
+    "entries": 0,
+    "roundsClosed": 0,
+    "roundsStarted": 0
+  },
+  "users": {},
+  "history": []
+}

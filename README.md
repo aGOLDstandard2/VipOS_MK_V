@@ -22,6 +22,19 @@ Macros, standard control-panel actions, and Twitch-triggered actions run through
 
 Quiet Mode can be toggled from the control panel or with `POST /api/v1/quiet-mode/on`, `POST /api/v1/quiet-mode/off`, and `POST /api/v1/quiet-mode/toggle`. When enabled, viewer-triggered Twitch/chat alert and sound actions are suppressed while manual API actions and OBS controls remain available.
 
+## Raffle
+The raffle system can be turned on or off from the control panel, or with:
+
+- `POST /api/v1/raffle/on`
+- `POST /api/v1/raffle/off`
+- `POST /api/v1/raffle/toggle`
+- `POST /api/v1/raffle/start`
+- `POST /api/v1/raffle/close`
+
+When turned on, the raffle system opens the first raffle immediately. After a raffle closes, the next raffle opens at a random time between `RAFFLE_MIN_DELAY_MS` and `RAFFLE_MAX_DELAY_MS`, defaulting to 5-10 minutes. An open raffle announces in chat and on the alert overlay, then posts the remaining seconds to chat every `RAFFLE_COUNTDOWN_INTERVAL_MS`, defaulting to 30 seconds. Set it to `20000` for 20-second updates. Viewers enter with `!join`; duplicate entries are ignored for the active round. Viewers can check their accumulated raffle points with `!points`.
+
+Raffle state is persisted in `config/raffle.json`, including users who entered raffles, winners, total wins, total entries, and accumulated points. Copy `config/raffle.example.json` to `config/raffle.json` if you want to seed settings manually; otherwise the service creates it from `.env` defaults.
+
 Use `POST /api/v1/actions/enqueue` to queue custom actions. Use `POST /api/v1/actions/run` only when you intentionally need to bypass the queue and run actions immediately.
 
 Queued sound actions use the local audio file duration to keep the item running until the effect should be finished. `sound.play` returns the detected `durationMs`, and the queue waits for the longest sound in the action results plus `QUEUE_SOUND_COMPLETION_BUFFER_MS`, defaulting to `250`. If a duration cannot be read, the queue falls back to `QUEUE_SOUND_COMPLETION_DELAY_MS`, defaulting to `4000`. Request bodies or macros may override automatic timing with `completionDelayMs`, `delayMs`, or `queueDelayMs`.

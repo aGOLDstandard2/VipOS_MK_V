@@ -6,6 +6,7 @@ const greetingPoolForm = document.querySelector('[data-greeting-pool-form]');
 const macroListEl = document.querySelector('[data-macro-list]');
 const queueStatusEl = document.querySelector('[data-queue-status]');
 const queueActivityEl = document.querySelector('[data-queue-activity]');
+const raffleStatusEl = document.querySelector('[data-raffle-status]');
 const soundInputEl = document.querySelector('[data-sound-input]');
 const soundListEl = document.querySelector('[data-sound-list]');
 const obsSceneSelect = document.querySelector('[data-obs-scenes]');
@@ -196,6 +197,43 @@ function formatQueueEvent(item) {
   return event.charAt(0).toUpperCase() + event.slice(1);
 }
 
+function renderRaffle(raffle) {
+  if (!raffleStatusEl) return;
+
+  if (!raffle) {
+    raffleStatusEl.innerHTML = '<div class="status-item"><span>Raffle</span><strong>Unavailable</strong></div>';
+    return;
+  }
+
+  const current = raffle.current || {};
+  const winners = raffle.winners || [];
+  const leaders = raffle.users || [];
+  const winnerText = winners.length
+    ? winners.slice(0, 3).map(item => {
+      const winner = item.winner ? item.winner.displayName : 'No winner';
+      return `#${item.roundNumber} ${winner}`;
+    }).join('\n')
+    : 'None';
+  const leaderText = leaders.length
+    ? leaders.slice(0, 5).map(user => `${user.displayName}: ${user.points} pts / ${user.wins} wins`).join('\n')
+    : 'None';
+
+  const items = [
+    ['State', raffle.enabled ? 'On' : 'Off'],
+    ['Current', current.status === 'open' ? `Open until ${formatDateValue(current.closesAt)}` : 'No open raffle'],
+    ['Entrants', current.status === 'open' ? formatStatusValue(current.entrantCount) : 'n/a'],
+    ['Next event', formatDateValue(raffle.nextEventAt)],
+    ['Commands', `${raffle.entryCommand} / ${raffle.pointsCommand}`],
+    ['Totals', `${raffle.totals.roundsStarted || 0} rounds / ${raffle.totals.entries || 0} entries`],
+    ['Recent winners', winnerText],
+    ['Point leaders', leaderText]
+  ];
+
+  raffleStatusEl.innerHTML = items.map(([label, value]) => (
+    `<div class="status-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
+  )).join('');
+}
+
 function renderStatusDetails(data) {
   if (!statusDetailsEl) return;
 
@@ -203,6 +241,7 @@ function renderStatusDetails(data) {
   const greetings = data.greetings || {};
   const obs = data.obs || {};
   const quietMode = data.quietMode || {};
+  const raffle = data.raffle || {};
   const sockets = data.sockets || {};
   const items = [
     ['OBS enabled', formatStatusValue(obs.enabled)],
@@ -230,6 +269,9 @@ function renderStatusDetails(data) {
     ['Raids', formatStatusValue(chat.raidHandlerCount)],
     ['Quiet mode', quietMode.enabled ? 'on' : 'off'],
     ['Quiet updated', formatDateValue(quietMode.updatedAt)],
+    ['Raffle', raffle.enabled ? 'on' : 'off'],
+    ['Raffle next', formatDateValue(raffle.nextEventAt)],
+    ['Raffle error', formatStatusValue(raffle.lastError)],
     ['Reward error', formatStatusValue(chat.rewardsLastError)],
     ['Chat error', formatStatusValue(chat.lastError)],
     ['Socket clients', formatStatusValue(sockets.clients)]
@@ -266,21 +308,25 @@ async function refreshStatus() {
     const data = await response.json();
     const chatLabel = data.chat.connected ? 'Chat online' : (data.chat.enabled ? 'Chat offline' : 'Chat disabled');
     const quietMode = data.quietMode || {};
+    const raffle = data.raffle || {};
     const socketCount = data.sockets.clients || 0;
 
     statusEl.innerHTML = [
       statusBadge(data.obs.identified ? 'OBS online' : 'OBS offline', data.obs.identified),
       statusBadge(chatLabel, data.chat.connected),
       statusBadge(quietMode.enabled ? 'Quiet mode on' : 'Quiet mode off', !quietMode.enabled),
+      statusBadge(raffle.enabled ? 'Raffle on' : 'Raffle off', Boolean(raffle.enabled)),
       `<span class="status-pill">${socketCount} socket${socketCount === 1 ? '' : 's'}</span>`
     ].join('');
     renderStatusDetails(data);
     renderQueue(data.queue);
+    renderRaffle(data.raffle);
   } catch (error) {
     statusEl.textContent = 'Status unavailable';
     if (statusDetailsEl) {
       statusDetailsEl.innerHTML = '<div class="status-item"><span>Status</span><strong>Unavailable</strong></div>';
     }
+    renderRaffle(null);
   }
 }
 
