@@ -6,7 +6,8 @@ const DEFAULT_MIN_DELAY_MS = 5 * 60 * 1000
 const DEFAULT_MAX_DELAY_MS = 10 * 60 * 1000
 const DEFAULT_ENTRY_WINDOW_MS = 2 * 60 * 1000
 const DEFAULT_COUNTDOWN_INTERVAL_MS = 30 * 1000
-const DEFAULT_WIN_POINTS = 1
+const DEFAULT_POINT_AMOUNTS = [100, 150, 200, 250, 300, 350, 400, 450, 500]
+const DEFAULT_POINT_NAME = 'raffle points'
 const DEFAULT_ENTRY_COMMAND = '!join'
 const DEFAULT_POINTS_COMMAND = '!points'
 
@@ -58,6 +59,7 @@ function createRaffleService({
     const openedAt = nowIso()
     const closesAt = new Date(Date.now() + state.settings.entryWindowMs).toISOString()
     const roundNumber = Number(state.totals.roundsStarted || 0) + 1
+    const prizeAmount = pickRandom(state.settings.pointAmounts)
 
     state.current = {
       id: `raffle-${Date.now()}`,
@@ -65,6 +67,8 @@ function createRaffleService({
       status: 'open',
       openedAt,
       closesAt,
+      prizeAmount,
+      pointName: state.settings.pointName,
       entrants: {}
     }
     state.nextEventAt = null
@@ -87,9 +91,13 @@ function createRaffleService({
     const closedAt = nowIso()
     const entrants = Object.values(state.current.entrants || {})
     const winner = entrants.length ? entrants[Math.floor(Math.random() * entrants.length)] : null
+    const prizeAmount = numberOrDefault(state.current.prizeAmount, pickRandom(state.settings.pointAmounts))
+    const pointName = state.current.pointName || state.settings.pointName
 
     state.current.status = 'closed'
     state.current.closedAt = closedAt
+    state.current.prizeAmount = prizeAmount
+    state.current.pointName = pointName
     state.current.winner = winner ? summarizeUser(winner) : null
     state.updatedAt = closedAt
     state.totals.roundsClosed = Number(state.totals.roundsClosed || 0) + 1
@@ -100,15 +108,17 @@ function createRaffleService({
       openedAt: state.current.openedAt,
       closedAt,
       entrantCount: entrants.length,
+      prizeAmount,
+      pointName,
       winner: winner ? summarizeUser(winner) : null
     }
 
     if (winner) {
       const user = ensureUser(winner)
       user.wins += 1
-      user.points += state.settings.winPoints
+      user.points += prizeAmount
       user.lastWonAt = closedAt
-      historyItem.pointsAwarded = state.settings.winPoints
+      historyItem.pointsAwarded = prizeAmount
     }
 
     state.history.unshift(historyItem)
@@ -257,6 +267,8 @@ function createRaffleService({
       entryCommand: state.settings.entryCommand,
       pointsCommand: state.settings.pointsCommand,
       entryWindowMs: state.settings.entryWindowMs,
+      pointAmounts: state.settings.pointAmounts.slice(),
+      pointName: state.settings.pointName,
       lastError: state.lastError || null,
       nextEventAt: state.nextEventAt,
       totals: { ...state.totals },
@@ -294,21 +306,22 @@ function createRaffleService({
   }
 
   async function announceRaffleOpen() {
+    const prize = formatPrize(state.current.prizeAmount, state.current.pointName)
     await announce([
       {
         type: 'chat.say',
-        message: `Raffle is open. Type ${state.settings.entryCommand} to enter. Winner picked in ${formatDuration(state.settings.entryWindowMs)}.`
+        message: `Raffle is open for ${prize}. Type ${state.settings.entryCommand} to enter. Winner picked in ${formatDuration(state.settings.entryWindowMs)}.`
       },
       {
         type: 'overlay.alert',
-        message: `Raffle open: type ${state.settings.entryCommand} to enter.`
+        message: `Raffle open for ${prize}: type ${state.settings.entryCommand} to enter.`
       }
     ], { source: 'raffle', raffle: { event: 'open', id: state.current.id } })
   }
 
   async function announceRaffleClosed(historyItem) {
     const message = historyItem.winner
-      ? `Raffle winner: ${historyItem.winner.displayName}. +${historyItem.pointsAwarded} point.`
+      ? `Raffle winner: ${historyItem.winner.displayName}. +${formatPrize(historyItem.pointsAwarded, historyItem.pointName)}.`
       : 'Raffle closed with no entries.'
 
     await announce([
@@ -325,7 +338,7 @@ function createRaffleService({
 
     safeAnnounce({
       type: 'chat.say',
-      message: `Raffle closes in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}. Type ${state.settings.entryCommand} to enter.`
+      message: `Raffle closes in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'} for ${formatPrize(state.current.prizeAmount, state.current.pointName)}. Type ${state.settings.entryCommand} to enter.`
     }, { source: 'raffle', raffle: { event: 'countdown', id: state.current.id, remainingSeconds } }, announceImmediate)
   }
 
@@ -354,7 +367,7 @@ function createRaffleService({
     const user = ensureUser(context)
     await announce({
       type: 'chat.say',
-      message: `${user.displayName}: ${user.points} raffle point${user.points === 1 ? '' : 's'}, ${user.wins} win${user.wins === 1 ? '' : 's'}, ${user.entries} entr${user.entries === 1 ? 'y' : 'ies'}.`
+      message: `${user.displayName}: ${formatPrize(user.points, state.settings.pointName)}, ${user.wins} win${user.wins === 1 ? '' : 's'}, ${user.entries} entr${user.entries === 1 ? 'y' : 'ies'}.`
     }, { source: 'raffle', messageId: context.messageId })
   }
 
@@ -405,13 +418,15 @@ function createRaffleService({
 function loadState(stateFile, settings, logger = console) {
   const stored = readJson(stateFile, logger)
   const now = nowIso()
+  const normalizedSettings = normalizeSettings({ ...(stored.settings || {}), ...settings })
+
   return {
     enabled: Boolean(stored.enabled ?? settings.enabled),
-    current: stored.current || null,
+    current: normalizeCurrent(stored.current, normalizedSettings),
     history: Array.isArray(stored.history) ? stored.history : [],
     lastError: stored.lastError || null,
     nextEventAt: stored.nextEventAt || null,
-    settings: normalizeSettings({ ...(stored.settings || {}), ...settings }),
+    settings: normalizedSettings,
     totals: {
       entries: 0,
       roundsClosed: 0,
@@ -420,6 +435,16 @@ function loadState(stateFile, settings, logger = console) {
     },
     updatedAt: stored.updatedAt || now,
     users: stored.users && typeof stored.users === 'object' ? stored.users : {}
+  }
+}
+
+function normalizeCurrent(current, settings) {
+  if (!current || typeof current !== 'object') return null
+  return {
+    ...current,
+    prizeAmount: numberOrDefault(current.prizeAmount, pickRandom(settings.pointAmounts)),
+    pointName: current.pointName || settings.pointName,
+    entrants: current.entrants && typeof current.entrants === 'object' ? current.entrants : {}
   }
 }
 
@@ -480,7 +505,11 @@ function readEnvSettings() {
   if (process.env.RAFFLE_MAX_DELAY_MS) settings.maxDelayMs = numberOrDefault(process.env.RAFFLE_MAX_DELAY_MS, DEFAULT_MAX_DELAY_MS)
   if (process.env.RAFFLE_MAX_HISTORY) settings.maxHistory = numberOrDefault(process.env.RAFFLE_MAX_HISTORY, 50)
   if (process.env.RAFFLE_MIN_DELAY_MS) settings.minDelayMs = numberOrDefault(process.env.RAFFLE_MIN_DELAY_MS, DEFAULT_MIN_DELAY_MS)
-  if (process.env.RAFFLE_WIN_POINTS) settings.winPoints = numberOrDefault(process.env.RAFFLE_WIN_POINTS, DEFAULT_WIN_POINTS)
+  if (process.env.RAFFLE_POINT_AMOUNTS) settings.pointAmounts = parsePointAmounts(process.env.RAFFLE_POINT_AMOUNTS)
+  if (process.env.RAFFLE_POINT_NAME) settings.pointName = process.env.RAFFLE_POINT_NAME
+  if (process.env.RAFFLE_WIN_POINTS && !settings.pointAmounts) {
+    settings.pointAmounts = [numberOrDefault(process.env.RAFFLE_WIN_POINTS, DEFAULT_POINT_AMOUNTS[0])]
+  }
 
   return settings
 }
@@ -498,8 +527,39 @@ function normalizeSettings(settings = {}) {
     maxDelayMs,
     maxHistory: numberOrDefault(settings.maxHistory, 50),
     minDelayMs,
-    winPoints: numberOrDefault(settings.winPoints, DEFAULT_WIN_POINTS)
+    pointAmounts: normalizePointAmounts(settings.pointAmounts || settings.winPoints),
+    pointName: normalizePointName(settings.pointName)
   }
+}
+
+function normalizePointAmounts(value) {
+  if (Array.isArray(value)) {
+    const amounts = value
+      .map(amount => Number(amount))
+      .filter(amount => Number.isFinite(amount) && amount > 0)
+      .map(amount => Math.round(amount))
+    return amounts.length ? amounts : DEFAULT_POINT_AMOUNTS.slice()
+  }
+
+  const amount = Number(value)
+  if (Number.isFinite(amount) && amount > 0) return [Math.round(amount)]
+  return DEFAULT_POINT_AMOUNTS.slice()
+}
+
+function parsePointAmounts(value) {
+  const text = String(value || '').trim()
+  if (!text) return DEFAULT_POINT_AMOUNTS.slice()
+
+  try {
+    return normalizePointAmounts(JSON.parse(text))
+  } catch (error) {
+    return normalizePointAmounts(text.split(','))
+  }
+}
+
+function normalizePointName(value) {
+  const text = String(value || '').trim()
+  return text || DEFAULT_POINT_NAME
 }
 
 function normalizeChatCommand(value) {
@@ -535,6 +595,11 @@ function randomDelay(minDelayMs, maxDelayMs) {
   return Math.floor(minDelayMs + Math.random() * (maxDelayMs - minDelayMs + 1))
 }
 
+function pickRandom(items) {
+  const list = Array.isArray(items) && items.length ? items : DEFAULT_POINT_AMOUNTS
+  return list[Math.floor(Math.random() * list.length)]
+}
+
 function numberOrDefault(value, defaultValue) {
   const number = Number(value)
   return Number.isFinite(number) && number > 0 ? Math.round(number) : defaultValue
@@ -567,6 +632,10 @@ function formatDate(value) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return String(value)
   return date.toLocaleTimeString()
+}
+
+function formatPrize(amount, pointName) {
+  return `${Number(amount) || 0} ${normalizePointName(pointName)}`
 }
 
 module.exports = {

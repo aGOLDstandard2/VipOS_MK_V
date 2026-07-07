@@ -7,7 +7,8 @@
     "entryWindowMs": 120000,
     "minDelayMs": 300000,
     "maxDelayMs": 600000,
-    "winPoints": 1,
+    "pointAmounts": [100, 150, 200, 250, 300, 350, 400, 450, 500],
+    "pointName": "cassette tapes",
     "maxHistory": 50
   },
   "totals": {

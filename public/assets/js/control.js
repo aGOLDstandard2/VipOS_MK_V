@@ -208,22 +208,26 @@ function renderRaffle(raffle) {
   const current = raffle.current || {};
   const winners = raffle.winners || [];
   const leaders = raffle.users || [];
+  const pointName = raffle.pointName || 'raffle points';
   const winnerText = winners.length
     ? winners.slice(0, 3).map(item => {
       const winner = item.winner ? item.winner.displayName : 'No winner';
-      return `#${item.roundNumber} ${winner}`;
+      const prize = item.pointsAwarded ? ` (${item.pointsAwarded} ${item.pointName || pointName})` : '';
+      return `#${item.roundNumber} ${winner}${prize}`;
     }).join('\n')
     : 'None';
   const leaderText = leaders.length
-    ? leaders.slice(0, 5).map(user => `${user.displayName}: ${user.points} pts / ${user.wins} wins`).join('\n')
+    ? leaders.slice(0, 5).map(user => `${user.displayName}: ${user.points} ${pointName} / ${user.wins} wins`).join('\n')
     : 'None';
 
   const items = [
     ['State', raffle.enabled ? 'On' : 'Off'],
     ['Current', current.status === 'open' ? `Open until ${formatDateValue(current.closesAt)}` : 'No open raffle'],
+    ['Prize', current.status === 'open' ? `${current.prizeAmount} ${current.pointName || pointName}` : 'n/a'],
     ['Entrants', current.status === 'open' ? formatStatusValue(current.entrantCount) : 'n/a'],
     ['Next event', formatDateValue(raffle.nextEventAt)],
     ['Commands', `${raffle.entryCommand} / ${raffle.pointsCommand}`],
+    ['Prize pool', (raffle.pointAmounts || []).map(amount => `${amount}`).join(', ')],
     ['Totals', `${raffle.totals.roundsStarted || 0} rounds / ${raffle.totals.entries || 0} entries`],
     ['Recent winners', winnerText],
     ['Point leaders', leaderText]
