@@ -141,7 +141,7 @@ function createActionRunner({
 
         const explicitReplyId = hydrate(action.replyParentMessageId || action.replyTo, context)
         const replyParentMessageId = explicitReplyId || (parseToggle(action.reply) === true ? context.messageId : undefined)
-        const sent = await chatService.say(message, { replyParentMessageId })
+        const sent = await chatService.say(message, { replyParentMessageId, simulated: context.simulated })
         return { type, message, ...sent }
       }
 

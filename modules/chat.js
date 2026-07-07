@@ -12,6 +12,7 @@ const DEFAULT_RECONNECT_MAX_MS = 60000
 const CHAT_SCOPES = ['user:read:chat', 'user:write:chat']
 const REDEMPTION_SCOPES = ['channel:read:redemptions', 'channel:manage:redemptions']
 const FOLLOW_SCOPES = ['moderator:read:followers']
+const SUBSCRIPTION_SCOPES = ['channel:read:subscriptions']
 
 let twurpleModules = null
 
@@ -38,6 +39,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
   let retryAttempt = 0
   let retryTimer = null
   let rewardEventHandlers = []
+  let subscriptionHandlers = []
   let rewardSubscriptionRegistrars = new Map()
   let rewardSubscriptionRetryQueue = new Map()
   let shouldRun = false
@@ -65,6 +67,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
     chatEntryHandlerCount: 0,
     communityEventCount: 0,
     communityEventHandlerCount: 0,
+    simulating: false,
     followHandlerCount: 0,
     lastCommandAt: null,
     lastChatEntry: null,
@@ -93,6 +96,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
     rewardEventCount: 0,
     rewardEventHandlerCount: 0,
     rewardsRetryAttempt: 0,
+    subscriptionHandlerCount: 0,
     retryAttempt: 0,
     tokenFile: relativePath(config.tokenFile)
   }
@@ -113,8 +117,9 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
 
       const twurple = await loadTwurple()
       const auth = await createAuthProvider(twurple, config, logger, {
-        needsBroadcasterToken: config.enableRedemptions || followHandlers.length > 0 || raidHandlers.length > 0,
-        needsFollowScopes: followHandlers.length > 0
+        needsBroadcasterToken: config.enableRedemptions || followHandlers.length > 0 || raidHandlers.length > 0 || subscriptionHandlers.length > 0,
+        needsFollowScopes: followHandlers.length > 0,
+        needsSubscriptionScopes: subscriptionHandlers.length > 0
       })
       authProvider = auth.authProvider
       state.authMode = auth.mode
@@ -222,6 +227,17 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
   }
 
   async function say(message, options = {}) {
+    if (options.simulated || state.simulating) {
+      const text = String(message || '').trim()
+      if (!text) throw new Error('chat.say requires a message')
+      logger.log(`Simulated Twitch chat message: ${text}`)
+      return {
+        id: `simulated-${Date.now()}`,
+        isSent: true,
+        simulated: true
+      }
+    }
+
     if (!api || !state.botUserId || !state.broadcasterId) {
       throw new Error('Twitch chat is not ready')
     }
@@ -389,6 +405,21 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
         })
       })
     }
+
+    if (subscriptionHandlers.length) {
+      eventSubListener.onChannelSubscription(state.broadcasterId, event => {
+        handleSubscription(event).catch(error => {
+          state.lastError = error.message
+          logger.error(`Twitch subscription handler failed: ${error.message}`)
+        })
+      })
+      eventSubListener.onChannelSubscriptionGift(state.broadcasterId, event => {
+        handleSubscriptionGift(event).catch(error => {
+          state.lastError = error.message
+          logger.error(`Twitch subscription gift handler failed: ${error.message}`)
+        })
+      })
+    }
   }
 
   function shouldBindRewardEvent(eventName) {
@@ -528,6 +559,45 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
     state.lastCommunityEventMatchedHandlers = await runConfiguredHandlers(raidHandlers, context)
   }
 
+  async function handleSubscription(event) {
+    const context = createSubscriptionContext(event)
+    state.communityEventCount += 1
+    state.lastCommunityEventAt = new Date().toISOString()
+    state.lastCommunityEvent = summarizeCommunityEventContext(context)
+    state.lastCommunityEventMatchedHandlers = await runConfiguredHandlers(subscriptionHandlers, context)
+  }
+
+  async function handleSubscriptionGift(event) {
+    const context = createSubscriptionGiftContext(event)
+    state.communityEventCount += 1
+    state.lastCommunityEventAt = new Date().toISOString()
+    state.lastCommunityEvent = summarizeCommunityEventContext(context)
+    state.lastCommunityEventMatchedHandlers = await runConfiguredHandlers(subscriptionHandlers, context)
+  }
+
+  async function simulateEvent(type, event) {
+    state.simulating = true
+    await loadCommands()
+
+    const normalizedType = normalizeEventName(type)
+    try {
+      switch (normalizedType) {
+        case 'follow.add':
+          return await handleFollow(event)
+        case 'raid.add':
+          return await handleRaid(event)
+        case 'subscription.add':
+          return await handleSubscription(event)
+        case 'subscription.gift':
+          return await handleSubscriptionGift(event)
+        default:
+          throw new Error(`Unsupported simulated Twitch event: ${type}`)
+      }
+    } finally {
+      state.simulating = false
+    }
+  }
+
   async function runCommand(commandMatch, context) {
     const { command, commandName, after, args } = commandMatch
     const commandContext = {
@@ -591,7 +661,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
     return actionQueue.enqueue({
       name,
       actions: actionList,
-      context,
+      context: state.simulating ? { ...context, simulated: true } : context,
       source: context.source || 'twitch'
     })
   }
@@ -645,6 +715,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
       chatEntryHandlers = []
       followHandlers = []
       raidHandlers = []
+      subscriptionHandlers = []
       redemptionHandlers = []
       redemptionUpdateHandlers = []
       automaticRedemptionHandlers = []
@@ -654,6 +725,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
       state.communityEventHandlerCount = 0
       state.followHandlerCount = 0
       state.raidHandlerCount = 0
+      state.subscriptionHandlerCount = 0
       state.redemptionHandlerCount = 0
       state.redemptionUpdateHandlerCount = 0
       state.automaticRedemptionHandlerCount = 0
@@ -671,6 +743,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
       const nextChatEntryHandlers = automationConfig.chatEntries.map(handler => normalizeActionHandler(handler, 'chat.entry')).filter(Boolean)
       const nextFollowHandlers = automationConfig.follows.map(handler => normalizeActionHandler(handler, 'follow.add')).filter(Boolean)
       const nextRaidHandlers = automationConfig.raids.map(handler => normalizeActionHandler(handler, 'raid.add')).filter(Boolean)
+      const nextSubscriptionHandlers = automationConfig.subscriptions.map(handler => normalizeActionHandler(handler, ['subscription.add', 'subscription.gift'])).filter(Boolean)
       const nextRedemptionHandlers = automationConfig.redemptions.map(handler => normalizeActionHandler(handler, 'redemption.add')).filter(Boolean)
       const nextRedemptionUpdateHandlers = automationConfig.redemptionUpdates.map(handler => normalizeActionHandler(handler, 'redemption.update')).filter(Boolean)
       const nextAutomaticRedemptionHandlers = automationConfig.automaticRedemptions.map(handler => normalizeActionHandler(handler, 'automatic-redemption.add')).filter(Boolean)
@@ -688,6 +761,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
       chatEntryHandlers = nextChatEntryHandlers
       followHandlers = nextFollowHandlers
       raidHandlers = nextRaidHandlers
+      subscriptionHandlers = nextSubscriptionHandlers
       redemptionHandlers = nextRedemptionHandlers
       redemptionUpdateHandlers = nextRedemptionUpdateHandlers
       automaticRedemptionHandlers = nextAutomaticRedemptionHandlers
@@ -696,7 +770,8 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
       state.chatEntryHandlerCount = chatEntryHandlers.length
       state.followHandlerCount = followHandlers.length
       state.raidHandlerCount = raidHandlers.length
-      state.communityEventHandlerCount = chatEntryHandlers.length + followHandlers.length + raidHandlers.length
+      state.subscriptionHandlerCount = subscriptionHandlers.length
+      state.communityEventHandlerCount = chatEntryHandlers.length + followHandlers.length + raidHandlers.length + subscriptionHandlers.length
       state.redemptionHandlerCount = redemptionHandlers.length
       state.redemptionUpdateHandlerCount = redemptionUpdateHandlers.length
       state.automaticRedemptionHandlerCount = automaticRedemptionHandlers.length
@@ -739,6 +814,7 @@ function createChatService({ actions, actionQueue = null, logger = console } = {
   return {
     getStatus,
     say,
+    simulateEvent,
     start,
     stop
   }
@@ -748,6 +824,7 @@ async function createAuthProvider(twurple, config, logger, options = {}) {
   if (!config.clientId) throw new Error('TWITCH_CLIENT_ID is required when CHAT_ENABLED=true')
   const needsBroadcasterToken = Boolean(options.needsBroadcasterToken)
   const needsFollowScopes = Boolean(options.needsFollowScopes)
+  const needsSubscriptionScopes = Boolean(options.needsSubscriptionScopes)
 
   const botToken = readTokenConfig(config.tokenFile)
   const botAccessToken = cleanAccessToken(botToken.accessToken || config.botAccessToken)
@@ -819,6 +896,9 @@ async function createAuthProvider(twurple, config, logger, options = {}) {
     }
     if (needsFollowScopes) {
       warnMissingScopes(broadcasterScopes, FOLLOW_SCOPES, logger, 'Twitch broadcaster token')
+    }
+    if (needsSubscriptionScopes) {
+      warnMissingScopes(broadcasterScopes, SUBSCRIPTION_SCOPES, logger, 'Twitch broadcaster token')
     }
 
     return { authProvider, botUserId, broadcasterUserId, mode: 'refreshing' }
@@ -1106,6 +1186,62 @@ function createRaidContext(event) {
   }
 }
 
+function createSubscriptionContext(event) {
+  return {
+    broadcaster: event.broadcasterName,
+    broadcasterDisplayName: event.broadcasterDisplayName,
+    broadcasterId: event.broadcasterId,
+    displayName: event.userDisplayName,
+    event: 'subscription.add',
+    isGift: Boolean(event.isGift),
+    message: `${event.userDisplayName} subscribed`,
+    source: 'subscription',
+    subscription: {
+      isGift: Boolean(event.isGift),
+      tier: event.tier,
+      userDisplayName: event.userDisplayName,
+      userId: event.userId,
+      username: event.userName
+    },
+    tier: event.tier,
+    user: event.userName,
+    userId: event.userId,
+    username: event.userName
+  }
+}
+
+function createSubscriptionGiftContext(event) {
+  const displayName = event.isAnonymous ? 'Anonymous' : event.gifterDisplayName
+  const username = event.isAnonymous ? 'anonymous' : event.gifterName
+  const userId = event.isAnonymous ? null : event.gifterId
+
+  return {
+    broadcaster: event.broadcasterName,
+    broadcasterDisplayName: event.broadcasterDisplayName,
+    broadcasterId: event.broadcasterId,
+    displayName,
+    event: 'subscription.gift',
+    isAnonymous: Boolean(event.isAnonymous),
+    isGift: true,
+    message: `${displayName} gifted ${event.amount} subscription${Number(event.amount) === 1 ? '' : 's'}`,
+    source: 'subscription',
+    subscription: {
+      amount: event.amount,
+      cumulativeAmount: event.cumulativeAmount,
+      gifterDisplayName: event.gifterDisplayName,
+      gifterId: event.gifterId,
+      gifterName: event.gifterName,
+      isAnonymous: Boolean(event.isAnonymous),
+      isGift: true,
+      tier: event.tier
+    },
+    tier: event.tier,
+    user: username,
+    userId,
+    username
+  }
+}
+
 function summarizeRedemptionContext(context) {
   return {
     automaticReward: context.automaticReward || null,
@@ -1134,6 +1270,7 @@ function summarizeCommunityEventContext(context) {
     event: context.event,
     follow: context.follow || null,
     raid: context.raid || null,
+    subscription: context.subscription || null,
     user: context.user,
     userId: context.userId
   }
@@ -1255,11 +1392,12 @@ function normalizeAutomationConfig(parsed) {
       automaticRedemptions: [],
       chatEntries: [],
       commands: parsed,
-      follows: [],
-      raids: [],
-      redemptions: [],
-      redemptionUpdates: [],
-      rewardEvents: []
+    follows: [],
+    raids: [],
+    redemptions: [],
+    redemptionUpdates: [],
+    rewardEvents: [],
+    subscriptions: []
     }
   }
 
@@ -1275,7 +1413,8 @@ function normalizeAutomationConfig(parsed) {
     raids: asArray(parsed.raids || parsed.raidEvents),
     redemptions: asArray(parsed.redemptions || parsed.rewardRedemptions),
     redemptionUpdates: asArray(parsed.redemptionUpdates),
-    rewardEvents: asArray(parsed.rewardEvents)
+    rewardEvents: asArray(parsed.rewardEvents),
+    subscriptions: asArray(parsed.subscriptions || parsed.subs || parsed.subscriptionEvents)
   }
 }
 
@@ -1411,11 +1550,27 @@ function normalizeEventName(value) {
     follow: 'follow.add',
     followed: 'follow.add',
     follower: 'follow.add',
+    gift: 'subscription.gift',
+    giftsub: 'subscription.gift',
+    'gift-sub': 'subscription.gift',
+    gifted: 'subscription.gift',
+    giftedsub: 'subscription.gift',
+    'gifted-sub': 'subscription.gift',
     raid: 'raid.add',
     raided: 'raid.add',
     redemption: 'redemption.add',
     redeemed: 'redemption.add',
     remove: 'reward.remove',
+    sub: 'subscription.add',
+    subs: 'subscription.add',
+    subscribe: 'subscription.add',
+    subscribed: 'subscription.add',
+    subscriber: 'subscription.add',
+    subscribers: 'subscription.add',
+    subscription: 'subscription.add',
+    subscriptiongift: 'subscription.gift',
+    'subscription-gift': 'subscription.gift',
+    subscriptions: 'subscription.add',
     update: 'reward.update'
   }
 
@@ -1597,5 +1752,6 @@ module.exports = {
   FOLLOW_SCOPES,
   createChatService,
   REDEMPTION_SCOPES,
+  SUBSCRIPTION_SCOPES,
   CHAT_SCOPES
 }

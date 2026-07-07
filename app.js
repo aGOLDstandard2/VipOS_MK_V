@@ -240,6 +240,12 @@ app.get('/api/v1/queue', (req, res) => {
   res.json({ ok: true, queue: actionQueue.getStatus() })
 })
 
+app.post('/api/v1/twitch/simulate/:type', asyncHandler(async (req, res) => {
+  const event = req.body.event && typeof req.body.event === 'object' ? req.body.event : req.body
+  await chat.simulateEvent(req.params.type, event)
+  res.json({ ok: true, event: req.params.type, queue: actionQueue.getStatus() })
+}))
+
 app.get('/api/v1/greetings', (req, res) => {
   res.json({ ok: true, greetings: greetings.getStatus() })
 })

@@ -131,5 +131,27 @@
         { "type": "sound.play", "src": "kitt_scanner.mp3", "volume": 1 }
       ]
     }
+  ],
+  "subscriptions": [
+    {
+      "name": "new-sub",
+      "match": {
+        "event": "subscription.add"
+      },
+      "actions": [
+        { "type": "overlay.alert", "message": "{displayName} subscribed at tier {subscription.tier}!" },
+        { "type": "chat.say", "message": "Thanks for subscribing, {displayName}!" }
+      ]
+    },
+    {
+      "name": "gift-sub",
+      "match": {
+        "event": "subscription.gift"
+      },
+      "actions": [
+        { "type": "overlay.alert", "message": "{displayName} gifted {subscription.amount} tier {subscription.tier} subs!" },
+        { "type": "chat.say", "message": "Thank you for gifting {subscription.amount} subs, {displayName}!" }
+      ]
+    }
   ]
 }

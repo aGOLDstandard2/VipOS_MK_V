@@ -1,0 +1,12 @@
+{
+  "amount": 5,
+  "broadcasterDisplayName": "ViperOS",
+  "broadcasterId": "100001",
+  "broadcasterName": "viperos",
+  "cumulativeAmount": 25,
+  "gifterDisplayName": "GiftBoss",
+  "gifterId": "500001",
+  "gifterName": "giftboss",
+  "isAnonymous": false,
+  "tier": "1000"
+}

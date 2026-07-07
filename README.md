@@ -59,6 +59,7 @@ bits:read channel:read:redemptions channel:manage:redemptions channel:read:polls
 - `chatEntries`
 - `follows`
 - `raids`
+- `subscriptions`
 
 Reward action templates can use values like `{displayName}`, `{message}`, `{reward.title}`, `{reward.id}`, `{reward.cost}`, `{redemption.input}`, and `{automaticReward.type}`.
 `sound.pickRandom` adds the picked file to the action context, so later actions can use `{sfx.src}`, `{sfx.filename}`, `{sfx.name}`, and `{sfx.text}` when the `contextKey` is `sfx`.
@@ -66,9 +67,29 @@ Reward action templates can use values like `{displayName}`, `{message}`, `{rewa
 
 For normal channel point usage, use `redemptions`; Twitch calls this event `redemption.add` because a viewer has added a new redemption. `redemptionUpdates`, `automaticRedemptions`, and `rewardEvents` are optional advanced handler groups, and the service only subscribes to those extra EventSub topics when handlers are configured for them at startup.
 
-Chat entry, follow, and raid interactions are configured with `chatEntries`, `follows`, and `raids`. Chat entry handlers fire once per bot session when the first chat message seen from a moderator or VIP arrives; Twitch chat messages do not expose silent joins. Follow handlers require the broadcaster token to include `moderator:read:followers`; raid handlers do not require an extra Twitch scope. The service only subscribes to follow and raid EventSub topics when handlers are configured at startup.
+Chat entry, follow, raid, and subscription interactions are configured with `chatEntries`, `follows`, `raids`, and `subscriptions`. Chat entry handlers fire once per bot session when the first chat message seen from a moderator or VIP arrives; Twitch chat messages do not expose silent joins. Follow handlers require the broadcaster token to include `moderator:read:followers`; subscription handlers require `channel:read:subscriptions`; raid handlers do not require an extra Twitch scope. The service only subscribes to follow, raid, and subscription EventSub topics when handlers are configured at startup.
 
-Chat entry templates can use `{displayName}`, `{username}`, `{entry.role}`, and `{entry.roles}`. Follow templates can use `{displayName}`, `{username}`, `{follow.followedAt}`, and broadcaster fields like `{broadcasterDisplayName}`. Raid templates can use `{displayName}`, `{username}`, `{raid.viewers}`, `{raid.fromBroadcasterName}`, and `{raid.toBroadcasterName}`.
+Chat entry templates can use `{displayName}`, `{username}`, `{entry.role}`, and `{entry.roles}`. Follow templates can use `{displayName}`, `{username}`, `{follow.followedAt}`, and broadcaster fields like `{broadcasterDisplayName}`. Raid templates can use `{displayName}`, `{username}`, `{raid.viewers}`, `{raid.fromBroadcasterName}`, and `{raid.toBroadcasterName}`. Subscription templates can use `{displayName}`, `{username}`, `{subscription.tier}`, `{subscription.isGift}`, `{subscription.amount}`, `{subscription.cumulativeAmount}`, and `{subscription.isAnonymous}`.
+
+Test follow, raid, and subscription handlers without connecting to Twitch:
+
+```bash
+npm run simulate:twitch-event -- follow
+npm run simulate:twitch-event -- raid
+npm run simulate:twitch-event -- sub
+npm run simulate:twitch-event -- gift-sub --count 5
+```
+
+The default simulator is a dry run that prints overlay/chat actions in the terminal. To fire the running app and any OBS browser sources pointed at its overlays, start the app first and add `--live`:
+
+```bash
+npm run simulate:twitch-event -- follow --live
+npm run simulate:twitch-event -- raid --live
+npm run simulate:twitch-event -- sub --live
+npm run simulate:twitch-event -- gift-sub --count 5 --live
+```
+
+The simulator uses `config/commands.json` when present, otherwise `config/commands.example.json`. Pass a custom fixture path after the event type to override the default payload. Use `--url http://127.0.0.1:5000` if the app is running on a different local URL.
 
 Redemption handlers can be catch-all, or they can include a `match` object:
 
