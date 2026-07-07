@@ -8,6 +8,7 @@ const DEFAULT_ENTRY_WINDOW_MS = 2 * 60 * 1000
 const DEFAULT_COUNTDOWN_INTERVAL_MS = 30 * 1000
 const DEFAULT_POINT_AMOUNTS = [100, 150, 200, 250, 300, 350, 400, 450, 500]
 const DEFAULT_POINT_NAME = 'raffle points'
+const DEFAULT_POINT_TWITCH_EMOJI = ''
 const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
 const DEFAULT_ENTRY_COMMAND = '!join'
 const DEFAULT_POINTS_COMMAND = '!points'
@@ -75,6 +76,7 @@ function createRaffleService({
       closesAt,
       prizeAmount,
       pointName: state.settings.pointName,
+      pointTwitchEmoji: state.settings.pointTwitchEmoji,
       entrants: {}
     }
     state.nextEventAt = null
@@ -99,11 +101,15 @@ function createRaffleService({
     const winner = entrants.length ? entrants[Math.floor(Math.random() * entrants.length)] : null
     const prizeAmount = numberOrDefault(state.current.prizeAmount, pickRandom(state.settings.pointAmounts))
     const pointName = state.current.pointName || state.settings.pointName
+    const pointTwitchEmoji = state.current.pointTwitchEmoji === undefined
+      ? state.settings.pointTwitchEmoji
+      : state.current.pointTwitchEmoji
 
     state.current.status = 'closed'
     state.current.closedAt = closedAt
     state.current.prizeAmount = prizeAmount
     state.current.pointName = pointName
+    state.current.pointTwitchEmoji = pointTwitchEmoji
     state.current.winner = winner ? summarizeUser(winner) : null
     state.updatedAt = closedAt
     state.totals.roundsClosed = Number(state.totals.roundsClosed || 0) + 1
@@ -116,6 +122,7 @@ function createRaffleService({
       entrantCount: entrants.length,
       prizeAmount,
       pointName,
+      pointTwitchEmoji,
       winner: winner ? summarizeUser(winner) : null
     }
 
@@ -275,6 +282,7 @@ function createRaffleService({
       entryWindowMs: state.settings.entryWindowMs,
       pointAmounts: state.settings.pointAmounts.slice(),
       pointName: state.settings.pointName,
+      pointTwitchEmoji: state.settings.pointTwitchEmoji,
       lastError: state.lastError || null,
       nextEventAt: state.nextEventAt,
       totals: { ...state.totals },
@@ -312,28 +320,32 @@ function createRaffleService({
   }
 
   async function announceRaffleOpen() {
-    const prize = formatPrize(state.current.prizeAmount, state.current.pointName)
+    const chatPrize = formatPrizeForChat(state.current.prizeAmount, state.current.pointName, state.current.pointTwitchEmoji)
+    const overlayPrize = formatPrize(state.current.prizeAmount, state.current.pointName)
     await announce([
       {
         type: 'chat.say',
-        message: `/me New Raffle for ${prize} drvipeCassette. Winner picked in ${formatDuration(state.settings.entryWindowMs)}. Type "${state.settings.entryCommand}" to enter.`
+        message: `/me New Raffle for ${chatPrize}. Winner picked in ${formatDuration(state.settings.entryWindowMs)}. Type "${state.settings.entryCommand}" to enter.`
       },
       {
         type: 'overlay.alert',
-        message: `New Raffle started for ${prize}!`,
+        message: `New Raffle started for ${overlayPrize}!`,
         sound: state.settings.alertSound || false
       }
     ], { source: 'raffle', raffle: { event: 'open', id: state.current.id } })
   }
 
   async function announceRaffleClosed(historyItem) {
-    const message = historyItem.winner
+    const chatMessage = historyItem.winner
+      ? `Raffle winner: ${historyItem.winner.displayName}. +${formatPrizeForChat(historyItem.pointsAwarded, historyItem.pointName, historyItem.pointTwitchEmoji)}.`
+      : 'Raffle closed with no entries.'
+    const overlayMessage = historyItem.winner
       ? `Raffle winner: ${historyItem.winner.displayName}. +${formatPrize(historyItem.pointsAwarded, historyItem.pointName)}.`
       : 'Raffle closed with no entries.'
 
     await announce([
-      { type: 'chat.say', message },
-      { type: 'overlay.alert', message }
+      { type: 'chat.say', message: chatMessage },
+      { type: 'overlay.alert', message: overlayMessage }
     ], { source: 'raffle', raffle: { event: 'closed', id: historyItem.id } })
   }
 
@@ -356,7 +368,7 @@ function createRaffleService({
 
     safeAnnounce({
       type: 'chat.say',
-      message: `/me Raffle closes in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'} for ${formatPrize(state.current.prizeAmount, state.current.pointName)}. Type "${state.settings.entryCommand}" to enter.`
+      message: `/me Raffle closes in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'} for ${formatPrizeForChat(state.current.prizeAmount, state.current.pointName, state.current.pointTwitchEmoji)}. Type "${state.settings.entryCommand}" to enter.`
     }, { source: 'raffle', raffle: { event: 'countdown', id: state.current.id, remainingSeconds } }, announceImmediate)
   }
 
@@ -385,7 +397,7 @@ function createRaffleService({
     const user = ensureUser(context)
     await announce({
       type: 'chat.say',
-      message: `${user.displayName}: ${formatPrize(user.points, state.settings.pointName)}, ${user.wins} win${user.wins === 1 ? '' : 's'}, ${user.entries} entr${user.entries === 1 ? 'y' : 'ies'}.`
+      message: `${user.displayName}: ${formatPrizeForChat(user.points, state.settings.pointName, state.settings.pointTwitchEmoji)}, ${user.wins} win${user.wins === 1 ? '' : 's'}, ${user.entries} entr${user.entries === 1 ? 'y' : 'ies'}.`
     }, { source: 'raffle', messageId: context.messageId })
   }
 
@@ -462,6 +474,7 @@ function normalizeCurrent(current, settings) {
     ...current,
     prizeAmount: numberOrDefault(current.prizeAmount, pickRandom(settings.pointAmounts)),
     pointName: current.pointName || settings.pointName,
+    pointTwitchEmoji: current.pointTwitchEmoji === undefined ? settings.pointTwitchEmoji : current.pointTwitchEmoji,
     entrants: current.entrants && typeof current.entrants === 'object' ? current.entrants : {}
   }
 }
@@ -525,6 +538,7 @@ function readEnvSettings() {
   if (process.env.RAFFLE_MIN_DELAY_MS) settings.minDelayMs = numberOrDefault(process.env.RAFFLE_MIN_DELAY_MS, DEFAULT_MIN_DELAY_MS)
   if (process.env.RAFFLE_POINT_AMOUNTS) settings.pointAmounts = parsePointAmounts(process.env.RAFFLE_POINT_AMOUNTS)
   if (process.env.RAFFLE_POINT_NAME) settings.pointName = process.env.RAFFLE_POINT_NAME
+  if (process.env.RAFFLE_POINT_TWITCH_EMOJI !== undefined) settings.pointTwitchEmoji = process.env.RAFFLE_POINT_TWITCH_EMOJI
   if (process.env.RAFFLE_ALERT_SOUND !== undefined) settings.alertSound = process.env.RAFFLE_ALERT_SOUND
   if (process.env.RAFFLE_WIN_POINTS && !settings.pointAmounts) {
     settings.pointAmounts = [numberOrDefault(process.env.RAFFLE_WIN_POINTS, DEFAULT_POINT_AMOUNTS[0])]
@@ -548,7 +562,8 @@ function normalizeSettings(settings = {}) {
     minDelayMs,
     alertSound: normalizeOptionalText(settings.alertSound ?? process.env.DEFAULT_ALERT_SOUND ?? DEFAULT_ALERT_SOUND),
     pointAmounts: normalizePointAmounts(settings.pointAmounts || settings.winPoints),
-    pointName: normalizePointName(settings.pointName)
+    pointName: normalizePointName(settings.pointName),
+    pointTwitchEmoji: normalizeOptionalText(settings.pointTwitchEmoji ?? DEFAULT_POINT_TWITCH_EMOJI)
   }
 }
 
@@ -660,6 +675,11 @@ function formatDate(value) {
 
 function formatPrize(amount, pointName) {
   return `${Number(amount) || 0} ${normalizePointName(pointName)}`
+}
+
+function formatPrizeForChat(amount, pointName, pointTwitchEmoji) {
+  const emoji = normalizeOptionalText(pointTwitchEmoji)
+  return emoji ? `${formatPrize(amount, pointName)} ${emoji}` : formatPrize(amount, pointName)
 }
 
 module.exports = {
