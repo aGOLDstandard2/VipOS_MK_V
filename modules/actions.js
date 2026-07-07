@@ -5,6 +5,7 @@ const { createGreetingService } = require('./greetings')
 
 const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', 'sounds')
 const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.json')
+const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
 const SOUND_FILE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 const SOUND_PATH_PATTERN = /^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 
@@ -41,6 +42,7 @@ function createActionRunner({
   logger = console,
   greetings = createGreetingService({ logger }),
   quietMode = null,
+  defaultAlertSound = process.env.DEFAULT_ALERT_SOUND || DEFAULT_ALERT_SOUND,
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
   soundTextFile = DEFAULT_SOUND_TEXT_FILE
 }) {
@@ -52,16 +54,17 @@ function createActionRunner({
 
   async function run(actions, context = {}) {
     const actionList = Array.isArray(actions) ? actions : [actions]
+    const hasExplicitSoundAction = actionList.some(isSoundAction)
     const results = []
 
     for (const action of actionList) {
-      results.push(await runOne(action, context))
+      results.push(await runOne(action, context, { hasExplicitSoundAction }))
     }
 
     return results
   }
 
-  async function runOne(action, context) {
+  async function runOne(action, context, options = {}) {
     if (!action || typeof action !== 'object') {
       throw new Error('Action must be an object')
     }
@@ -99,7 +102,8 @@ function createActionRunner({
         if (!message) throw new Error('overlay.alert requires a message')
         if (action.background !== false) io.emit('bg-alert')
         io.emit('text-alert', { message })
-        return { type, message }
+        const soundResult = maybePlayAlertSound(action, context, options)
+        return soundResult ? { type, message, sound: soundResult } : { type, message }
       }
 
       case 'sound.play': {
@@ -207,6 +211,22 @@ function createActionRunner({
     }
   }
 
+  function maybePlayAlertSound(action, context, { hasExplicitSoundAction = false } = {}) {
+    if (action.sound === false || action.playSound === false) return null
+    if (hasExplicitSoundAction && action.sound === undefined && action.soundSrc === undefined && action.src === undefined) return null
+
+    const requestedSrc = action.sound === true
+      ? defaultAlertSound
+      : action.sound || action.soundSrc || action.src || defaultAlertSound
+    const src = validateSoundSrc(hydrate(requestedSrc, context))
+    if (!src) return null
+
+    const volume = clamp(Number(action.volume ?? 1), 0, 1)
+    const durationMs = getSoundDurationMs(src, soundDirectory, logger)
+    io.emit('sound-play', { src, volume })
+    return { type: 'sound.play', src, volume, durationMs, source: 'overlay.alert' }
+  }
+
   return {
     run,
     setChatService
@@ -282,6 +302,12 @@ function shouldSuppressAction(type, context, quietMode) {
 
 function isQuietableAction(type) {
   return type === 'overlay.alert' || type === 'overlay.emit' || type === 'sound.play' || type === 'sound.pickRandom'
+}
+
+function isSoundAction(action) {
+  if (!action || typeof action !== 'object') return false
+  const type = action.type || action.action
+  return type === 'sound.play' || type === 'sound.pickRandom'
 }
 
 function isViewerTriggeredContext(context = {}) {

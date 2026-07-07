@@ -31,7 +31,7 @@ The raffle system can be turned on or off from the control panel, or with:
 - `POST /api/v1/raffle/start`
 - `POST /api/v1/raffle/close`
 
-When turned on, the raffle system opens the first raffle immediately. After a raffle closes, the next raffle opens at a random time between `settings.minDelayMs` and `settings.maxDelayMs`, defaulting to 5-10 minutes. Each raffle randomly picks its prize from `settings.pointAmounts`, defaulting to `[100,150,200,250,300,350,400,450,500]`, and announces the amount with `settings.pointName`, such as `cassette tapes` or `viperbucks`. An open raffle announces in chat and on the alert overlay, then posts the remaining seconds to chat every `settings.countdownIntervalMs`, defaulting to 30 seconds. Set it to `20000` for 20-second updates. Viewers enter with `settings.entryCommand`; duplicate entries are ignored for the active round. Viewers can check their accumulated raffle points with `settings.pointsCommand`.
+When turned on, the raffle system opens the first raffle immediately. After a raffle closes, the next raffle opens at a random time between `settings.minDelayMs` and `settings.maxDelayMs`, defaulting to 5-10 minutes. Each raffle randomly picks its prize from `settings.pointAmounts`, defaulting to `[100,150,200,250,300,350,400,450,500]`, and announces the amount with `settings.pointName`, such as `cassette tapes` or `viperbucks`. An open raffle announces in chat and on the alert overlay, plays `settings.alertSound` when configured, then posts the remaining seconds to chat every `settings.countdownIntervalMs`, defaulting to 30 seconds. Set it to `20000` for 20-second updates. Viewers enter with `settings.entryCommand`; duplicate entries are ignored for the active round. Viewers can check their accumulated raffle points with `settings.pointsCommand`.
 
 Raffle state and detailed raffle settings are persisted in `config/raffle.json`, including users who entered raffles, winners, total wins, total entries, and accumulated points. Copy `config/raffle.example.json` to `config/raffle.json` to customize raffle behavior. `.env` only needs `RAFFLE_ENABLED` for the default startup toggle; advanced `RAFFLE_*` environment values are still supported as deployment overrides and take precedence over matching JSON settings when present.
 
@@ -155,5 +155,6 @@ Action types currently supported:
 - `delay`
 - `log`
 
+`overlay.alert` plays `DEFAULT_ALERT_SOUND` by default unless the action includes `sound: false`, a custom `sound`/`soundSrc`, or the same action list already includes a separate `sound.play` or `sound.pickRandom` action.
 `sound.pickRandom` chooses from top-level `.mp3`, `.ogg`, and `.wav` files in `public/assets/sounds`; subdirectories are ignored. Edit `config/sfx-text.json` to control the overlay text for each filename.
 Edit `config/greetings.json` to control the themed text pools used by `context.pickRandom`. The control panel can switch the active greeting theme, which is saved in `config/greetings-settings.json`.

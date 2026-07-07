@@ -205,7 +205,14 @@ function resolveCompletionDelayMs(item, results, soundCompletionBufferMs) {
 }
 
 function getSoundResults(results) {
-  return flattenResults(results).filter(result => result && result.type === 'sound.play' && !result.suppressed)
+  return flattenResults(results)
+    .flatMap(expandResultSounds)
+    .filter(result => result && result.type === 'sound.play' && !result.suppressed)
+}
+
+function expandResultSounds(result) {
+  if (!result) return []
+  return result.sound ? [result, result.sound] : [result]
 }
 
 function getLongestSoundDurationMs(soundResults) {

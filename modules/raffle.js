@@ -8,6 +8,7 @@ const DEFAULT_ENTRY_WINDOW_MS = 2 * 60 * 1000
 const DEFAULT_COUNTDOWN_INTERVAL_MS = 30 * 1000
 const DEFAULT_POINT_AMOUNTS = [100, 150, 200, 250, 300, 350, 400, 450, 500]
 const DEFAULT_POINT_NAME = 'raffle points'
+const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
 const DEFAULT_ENTRY_COMMAND = '!join'
 const DEFAULT_POINTS_COMMAND = '!points'
 
@@ -33,16 +34,21 @@ function createRaffleService({
   }
 
   function disable() {
+    const wasEnabled = state.enabled
+    const hadOpenRaffle = Boolean(state.current && state.current.status === 'open')
+
     state.enabled = false
     state.updatedAt = nowIso()
     clearEventTimer()
+    clearCloseTimer()
     clearCountdownTimer()
-    if (state.current && state.current.status === 'open') {
+    if (hadOpenRaffle) {
       state.current.status = 'canceled'
       state.current.closedAt = nowIso()
     }
     state.nextEventAt = null
     save()
+    if (wasEnabled || hadOpenRaffle) announceRaffleDisabled(hadOpenRaffle)
     return getStatus()
   }
 
@@ -310,11 +316,12 @@ function createRaffleService({
     await announce([
       {
         type: 'chat.say',
-        message: `Raffle is open for ${prize}. Type ${state.settings.entryCommand} to enter. Winner picked in ${formatDuration(state.settings.entryWindowMs)}.`
+        message: `/me New Raffle for ${prize} drvipeCassette. Winner picked in ${formatDuration(state.settings.entryWindowMs)}. Type "${state.settings.entryCommand}" to enter.`
       },
       {
         type: 'overlay.alert',
-        message: `Raffle open for ${prize}: type ${state.settings.entryCommand} to enter.`
+        message: `New Raffle started for ${prize}!`,
+        sound: state.settings.alertSound || false
       }
     ], { source: 'raffle', raffle: { event: 'open', id: state.current.id } })
   }
@@ -330,6 +337,17 @@ function createRaffleService({
     ], { source: 'raffle', raffle: { event: 'closed', id: historyItem.id } })
   }
 
+  function announceRaffleDisabled(hadOpenRaffle) {
+    const message = hadOpenRaffle
+      ? 'Any open raffle has been closed. The automated raffle system is now off.'
+      : 'The automated raffle system is now off.'
+
+    safeAnnounce({
+      type: 'chat.say',
+      message
+    }, { source: 'raffle', raffle: { event: 'disabled' } }, announceImmediate)
+  }
+
   function announceCountdown() {
     if (!state.current || state.current.status !== 'open') return
 
@@ -338,7 +356,7 @@ function createRaffleService({
 
     safeAnnounce({
       type: 'chat.say',
-      message: `Raffle closes in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'} for ${formatPrize(state.current.prizeAmount, state.current.pointName)}. Type ${state.settings.entryCommand} to enter.`
+      message: `/me Raffle closes in ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'} for ${formatPrize(state.current.prizeAmount, state.current.pointName)}. Type "${state.settings.entryCommand}" to enter.`
     }, { source: 'raffle', raffle: { event: 'countdown', id: state.current.id, remainingSeconds } }, announceImmediate)
   }
 
@@ -507,6 +525,7 @@ function readEnvSettings() {
   if (process.env.RAFFLE_MIN_DELAY_MS) settings.minDelayMs = numberOrDefault(process.env.RAFFLE_MIN_DELAY_MS, DEFAULT_MIN_DELAY_MS)
   if (process.env.RAFFLE_POINT_AMOUNTS) settings.pointAmounts = parsePointAmounts(process.env.RAFFLE_POINT_AMOUNTS)
   if (process.env.RAFFLE_POINT_NAME) settings.pointName = process.env.RAFFLE_POINT_NAME
+  if (process.env.RAFFLE_ALERT_SOUND !== undefined) settings.alertSound = process.env.RAFFLE_ALERT_SOUND
   if (process.env.RAFFLE_WIN_POINTS && !settings.pointAmounts) {
     settings.pointAmounts = [numberOrDefault(process.env.RAFFLE_WIN_POINTS, DEFAULT_POINT_AMOUNTS[0])]
   }
@@ -527,9 +546,14 @@ function normalizeSettings(settings = {}) {
     maxDelayMs,
     maxHistory: numberOrDefault(settings.maxHistory, 50),
     minDelayMs,
+    alertSound: normalizeOptionalText(settings.alertSound ?? process.env.DEFAULT_ALERT_SOUND ?? DEFAULT_ALERT_SOUND),
     pointAmounts: normalizePointAmounts(settings.pointAmounts || settings.winPoints),
     pointName: normalizePointName(settings.pointName)
   }
+}
+
+function normalizeOptionalText(value) {
+  return String(value || '').trim()
 }
 
 function normalizePointAmounts(value) {
