@@ -28,9 +28,11 @@ body.control-page {
 }
 
 #control-panel .control-header h1 {
-  font-size: 30px;
+  font-family: "NeoNoire",Arial,sans-serif;
+  font-size: 50px;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.5;
+  text-shadow: #00fffc -3px 3px,#ff00f0 -6px 6px;
 }
 
 #control-panel .control-header p,
