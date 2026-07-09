@@ -1,13 +1,7 @@
 .env
 config/auth_notes.txt
-config/commands.json
-config/greetings-settings.json
-config/greetings.json
-config/macros.json
-config/raffle.json
-config/sfx-text.json
-config/twitch-broadcaster-token.json
-config/twitch-token.json
+config/*
+!config/*.example.json
 config/*.tmp
 node_modules/*
 TO-DO.md

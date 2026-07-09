@@ -9,7 +9,17 @@
 ## Local URLs
 - Control panel: `http://localhost:5000/control`
 - Alerts overlay, including sound alerts: `http://localhost:5000/overlay/alerts`
+- News chyron overlay: `http://localhost:5000/overlay/news-chyron`
 - Stream border overlay: `http://localhost:5000/overlay/stream-border`
+
+## News Chyron
+The news chyron rotates its `h1`, `h2`, and `h3` text at random. Set `NEWS_CHYRON_ROTATE_INTERVAL_MS=30000` in `.env` to change the timer.
+
+To replace the default text pool, copy `config/news-chyron.example.json` to `config/news-chyron.json`, edit the entries, and point `NEWS_CHYRON_ITEMS` at that file:
+
+```env
+NEWS_CHYRON_ITEMS=config/news-chyron.json
+```
 
 ## Control Panel
 The control panel includes configured macro buttons, action queue controls, OBS scene/source/input discovery, manual overlay controls, chat messages, and the raw action runner.

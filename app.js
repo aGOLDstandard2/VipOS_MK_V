@@ -9,6 +9,7 @@ const server = http.createServer(app)
 const { Server } = require("socket.io")
 const cors = require('cors')
 const favicon = require('serve-favicon')
+const fs = require('fs')
 const path = require('path')
 
 const { createActionRunner, listSoundFiles, validateSoundSrc } = require('./modules/actions')
@@ -25,6 +26,8 @@ const APP_DESCRIPTION = process.env.APP_DESCRIPTION || 'Chat Bot + Overlay Platf
 const DEFAULT_ALERT_SOUND = process.env.DEFAULT_ALERT_SOUND || 'kitt_scanner.mp3'
 const DEFAULT_SOUND_COMPLETION_DELAY_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPLETION_DELAY_MS, 4000)
 const SOUND_COMPLETION_BUFFER_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPLETION_BUFFER_MS, 250)
+const NEWS_CHYRON_ROTATE_INTERVAL_MS = numberOrDefault(process.env.NEWS_CHYRON_ROTATE_INTERVAL_MS, 30000)
+const NEWS_CHYRON_ITEMS = readNewsChyronItems()
 const ALLOWED_ORIGINS = new Set([
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`
@@ -163,6 +166,70 @@ function numberOrDefault(value, defaultValue) {
   return Number.isFinite(number) && number >= 0 ? number : defaultValue
 }
 
+function readNewsChyronItems() {
+  const defaultItems = [
+    {
+      h3: 'VipOS MARK V SYSTEM ONLINE',
+      h1: 'SIGNAL STRENGTH IMPROVING',
+      h2: 'Broadcasting from somewhere beyond the end of the dial'
+    },
+    {
+      h3: 'VIPERVERSE FIELD REPORT',
+      h1: 'TRANSMISSION LOCKED',
+      h2: 'Unauthorized levels of style detected in the broadcast zone'
+    },
+    {
+      h3: 'BREAKING STREAM UPDATE',
+      h1: 'CHAT ENERGY RISING',
+      h2: 'Sensors report escalating vibes across all known channels'
+    },
+    {
+      h3: 'CONTROL ROOM NOTICE',
+      h1: 'OVERLAY ARRAY STABLE',
+      h2: 'All systems tuned for maximum neon nonsense'
+    }
+  ]
+
+  const itemsSource = process.env.NEWS_CHYRON_ITEMS
+  if (!itemsSource) return defaultItems
+
+  try {
+    const parsed = parseNewsChyronItemsSource(itemsSource)
+    const items = Array.isArray(parsed) ? parsed.map(normalizeNewsChyronItem).filter(Boolean) : []
+    return items.length ? items : defaultItems
+  } catch (error) {
+    console.warn('NEWS_CHYRON_ITEMS must be a JSON array or a path to a JSON file with h1, h2, and h3 strings. Using defaults.')
+    return defaultItems
+  }
+}
+
+function parseNewsChyronItemsSource(source) {
+  const trimmedSource = source.trim()
+  if (trimmedSource.startsWith('[')) return JSON.parse(trimmedSource)
+
+  const filePath = path.isAbsolute(trimmedSource) ? trimmedSource : path.join(__dirname, trimmedSource)
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+}
+
+function normalizeNewsChyronItem(item) {
+  if (!item || typeof item !== 'object') return null
+
+  const h1 = normalizeChyronText(item.h1)
+  const h2 = normalizeChyronText(item.h2)
+  const h3 = normalizeChyronText(item.h3)
+  if (!h1 || !h2 || !h3) return null
+
+  return { h1, h2, h3 }
+}
+
+function normalizeChyronText(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function safeJsonForScript(value) {
+  return JSON.stringify(value).replace(/</g, '\\u003c')
+}
+
 
 /**
  * Check if the origin is allowed based on the ALLOWED_ORIGINS
@@ -236,6 +303,15 @@ app.get('/overlay/alerts', (req, res) => {
   res.render('overlays/alerts.ejs', { loadSocket: true })
 })
 
+app.get('/overlay/news-chyron', (req, res) => {
+  res.render('overlays/news-chyron.ejs', {
+    loadSocket: true,
+    chyronItems: NEWS_CHYRON_ITEMS,
+    chyronItemsJson: safeJsonForScript(NEWS_CHYRON_ITEMS),
+    chyronRotateIntervalMs: NEWS_CHYRON_ROTATE_INTERVAL_MS
+  })
+})
+
 app.get('/overlay/stream-border', (req, res) => {
   res.render('overlays/stream-border.ejs', { loadSocket: true })
 })
@@ -246,10 +322,6 @@ app.get('/overlay/tv-guide', (req, res) => {
 
 app.get('/overlay/venom-coin', (req, res) => {
   res.render('overlays/venom-coin.ejs')
-})
-
-app.get('/overlay/viper-cam', (req, res) => {
-  res.render('overlays/viper-cam.ejs')
 })
 
 

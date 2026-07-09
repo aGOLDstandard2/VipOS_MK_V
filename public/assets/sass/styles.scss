@@ -92,6 +92,7 @@ a:hover {color: var(--featured-color-hover);}
 
   #bg-chroma-key {
     background-color: #00e439;
+    border: 4px solid #000;
     height: 100%;
     width: 100%;
   }
@@ -317,6 +318,116 @@ a:hover {color: var(--featured-color-hover);}
         transform: scale(1) rotate(-5deg);
       }
     }
+  }
+}
+
+/* C H Y R O N - B A R
+-------------------------------------------------------------------------------*/
+#chyron-container {
+  height: 1080px;
+  position: relative;
+  width: 1920px;
+
+  #chyron {
+    background-color: #080318;
+    border-top: 3px solid #c32272;
+    border-image: linear-gradient(to bottom,#c32272,#ffffff, #c32272) 1 0 0 0;
+    bottom: 7px;
+    box-shadow: 0 -3px 0px #000;
+    height: 125px;
+    margin: 0 7px;
+    position: absolute;
+    width: 1906px; // ( 1920 - 14px for padding )
+
+    #logo-box {
+      background: #1C0B43;
+      background: linear-gradient(169deg,rgba(28, 11, 67, 1) 0%, rgba(80, 27, 204, 1) 100%);
+      border-right: 3px solid #000;
+      border-top: 3px solid #000;
+      box-shadow: 3px 0px 0px #c32272;
+      position: absolute;
+      height: 122px;
+      width: 132px;
+    }
+
+    #chyron-text {
+      background: #1C0B43;
+      border-top: 3px solid #000;
+      position:absolute;
+      left: 138px;
+      height: 122px;
+      width: 1768px;
+
+      #chyron-title {
+        background: #1C0B43;
+        background: linear-gradient(90deg, rgba(53, 30, 105, 1) 0%, rgba(28, 11, 67, 1) 75%);
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        height: 30px;
+        width: 1765px; // ( 1768 - 3px for padding )
+
+        h3 {
+          font-family: "Segoe UI", sans-serif;
+          font-size: 15px;
+          font-weight: bolder;
+          padding: 0 0 0 10px;
+          color: #fff;
+          letter-spacing: 1px;
+          line-height: 29px;
+          text-shadow: 0px 2px 0px #000000;
+        }
+      }
+
+      #chyron-header {
+        position: absolute;
+        top: 36px;
+        left: 3px;
+        height: 83px;
+        width: 1765px; // ( 1768 - 3px for padding )
+
+        h1,
+        h2 {
+          font-family: 'Orbitron';
+          color: #fff;
+          letter-spacing: 1px;
+          padding: 0 0 0 10px;
+          text-shadow: 0px 2px 0px #000000;
+        }
+
+        h1 {
+          font-size: 37px;
+          padding-top: 3px;
+          padding-bottom: 3px;
+        }
+
+        h2 {
+          font-size: 20px;
+          text-transform: uppercase;
+        }
+
+        &::after {
+          animation: mist 75s infinite linear;
+          background: url("../img/chyron_header_bg.png") top left;
+          background-size: auto 100%;
+          content: "";
+          height: 100%;
+          left: 0;
+          position: absolute;
+          top: 0;
+          width: 100%;
+        }
+      }
+    }
+  }
+}
+
+@keyframes mist {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: -100vw 0;
   }
 }
 
