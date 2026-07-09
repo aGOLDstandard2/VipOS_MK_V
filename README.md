@@ -15,10 +15,13 @@
 ## News Chyron
 The news chyron rotates its `h1`, `h2`, and `h3` text at random. Set `NEWS_CHYRON_ROTATE_INTERVAL_MS=30000` in `.env` to change the timer.
 
-To replace the default text pool, copy `config/news-chyron.example.json` to `config/news-chyron.json`, edit the entries, and point `NEWS_CHYRON_ITEMS` at that file:
+By default, the text pool is loaded from `NEWS_CHYRON_ITEMS_DEFAULT`, which points to `config/news-chyron.example.json` unless overridden.
+
+To replace the default text pool, copy `config/news-chyron.example.json` to `config/news-chyron.json`, edit the entries, and uncomment `NEWS_CHYRON_ITEMS`:
 
 ```env
-NEWS_CHYRON_ITEMS=config/news-chyron.json
+NEWS_CHYRON_ITEMS_DEFAULT=config/news-chyron.example.json
+# NEWS_CHYRON_ITEMS=config/news-chyron.json
 ```
 
 ## Control Panel

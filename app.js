@@ -27,6 +27,7 @@ const DEFAULT_ALERT_SOUND = process.env.DEFAULT_ALERT_SOUND || 'kitt_scanner.mp3
 const DEFAULT_SOUND_COMPLETION_DELAY_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPLETION_DELAY_MS, 4000)
 const SOUND_COMPLETION_BUFFER_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPLETION_BUFFER_MS, 250)
 const NEWS_CHYRON_ROTATE_INTERVAL_MS = numberOrDefault(process.env.NEWS_CHYRON_ROTATE_INTERVAL_MS, 30000)
+const NEWS_CHYRON_ITEMS_DEFAULT = process.env.NEWS_CHYRON_ITEMS_DEFAULT || 'config/news-chyron.example.json'
 const NEWS_CHYRON_ITEMS = readNewsChyronItems()
 const ALLOWED_ORIGINS = new Set([
   `http://localhost:${PORT}`,
@@ -167,40 +168,34 @@ function numberOrDefault(value, defaultValue) {
 }
 
 function readNewsChyronItems() {
-  const defaultItems = [
-    {
-      h3: 'VipOS MARK V SYSTEM ONLINE',
-      h1: 'SIGNAL STRENGTH IMPROVING',
-      h2: 'Broadcasting from somewhere beyond the end of the dial'
-    },
-    {
-      h3: 'VIPERVERSE FIELD REPORT',
-      h1: 'TRANSMISSION LOCKED',
-      h2: 'Unauthorized levels of style detected in the broadcast zone'
-    },
-    {
-      h3: 'BREAKING STREAM UPDATE',
-      h1: 'CHAT ENERGY RISING',
-      h2: 'Sensors report escalating vibes across all known channels'
-    },
-    {
-      h3: 'CONTROL ROOM NOTICE',
-      h1: 'OVERLAY ARRAY STABLE',
-      h2: 'All systems tuned for maximum neon nonsense'
-    }
-  ]
-
-  const itemsSource = process.env.NEWS_CHYRON_ITEMS
-  if (!itemsSource) return defaultItems
+  const itemsSource = process.env.NEWS_CHYRON_ITEMS || NEWS_CHYRON_ITEMS_DEFAULT
 
   try {
     const parsed = parseNewsChyronItemsSource(itemsSource)
     const items = Array.isArray(parsed) ? parsed.map(normalizeNewsChyronItem).filter(Boolean) : []
-    return items.length ? items : defaultItems
+    return items.length ? items : readDefaultNewsChyronItems()
   } catch (error) {
-    console.warn('NEWS_CHYRON_ITEMS must be a JSON array or a path to a JSON file with h1, h2, and h3 strings. Using defaults.')
-    return defaultItems
+    console.warn('NEWS_CHYRON_ITEMS must be a JSON array or a path to a JSON file with h1, h2, and h3 strings. Using default news chyron items.')
+    return readDefaultNewsChyronItems()
   }
+}
+
+function readDefaultNewsChyronItems() {
+  try {
+    const parsed = parseNewsChyronItemsSource(NEWS_CHYRON_ITEMS_DEFAULT)
+    const items = Array.isArray(parsed) ? parsed.map(normalizeNewsChyronItem).filter(Boolean) : []
+    if (items.length) return items
+  } catch (error) {
+    console.warn('NEWS_CHYRON_ITEMS_DEFAULT must be a JSON array or a path to a JSON file with h1, h2, and h3 strings.')
+  }
+
+  return [
+    {
+      h3: 'VipOS MARK V SYSTEM ONLINE',
+      h1: 'SIGNAL STRENGTH IMPROVING',
+      h2: 'Broadcasting from somewhere beyond the end of the dial'
+    }
+  ]
 }
 
 function parseNewsChyronItemsSource(source) {
