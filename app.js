@@ -250,7 +250,6 @@ function readDefaultTvGuideItems() {
   return [
     {
       type: 'channel',
-      number: '1',
       name: 'VIPER',
       titleLines: ['1', 'VIPER'],
       programs: [
@@ -263,33 +262,33 @@ function readDefaultTvGuideItems() {
 function buildTvGuideItems(config) {
   if (!config || typeof config !== 'object') return []
 
+  const channelStartNumber = normalizePositiveInteger(config.channelStartNumber, 2)
   const channels = Array.isArray(config.channels)
-    ? config.channels.map(normalizeTvGuideChannel).filter(Boolean).map(randomizeTvGuidePrograms)
+    ? config.channels.map(normalizeTvGuideChannel).filter(Boolean)
     : []
+  const channelSampleSize = normalizePositiveInteger(config.channelSampleSize, channels.length)
+  const sampledChannels = sampleTvGuideChannels(channels, channelSampleSize)
   const banners = Array.isArray(config.banners)
     ? config.banners.map(normalizeTvGuideBanner).filter(Boolean)
     : []
 
-  return channels.concat(banners)
+  return numberTvGuideChannels(sampledChannels, channelStartNumber).concat(banners)
 }
 
 function normalizeTvGuideChannel(channel) {
   if (!channel || typeof channel !== 'object') return null
 
-  const number = String(channel.number ?? '').trim()
   const name = normalizeTvGuideText(channel.name)
   const programs = Array.isArray(channel.programs)
     ? channel.programs.map(normalizeTvGuideProgram).filter(Boolean)
     : []
 
-  if (!number || !name || !programs.length) return null
+  if (!name || !programs.length) return null
 
   return {
     type: 'channel',
-    number,
     name,
-    titleLines: [number, name],
-    programs: fitTvGuidePrograms(programs)
+    programs
   }
 }
 
@@ -316,11 +315,40 @@ function normalizeTvGuideBanner(banner) {
   }
 }
 
-function randomizeTvGuidePrograms(channel) {
-  return {
-    ...channel,
-    programs: fitTvGuidePrograms(shuffleArray(channel.programs))
+function sampleTvGuideChannels(channels, sampleSize) {
+  return shuffleArray(channels).slice(0, Math.min(sampleSize, channels.length))
+}
+
+function numberTvGuideChannels(channels, startNumber) {
+  return channels.map((channel, index) => {
+    const number = String(startNumber + index)
+
+    return {
+      ...channel,
+      number,
+      titleLines: [number, channel.name],
+      programs: selectTvGuidePrograms(channel.programs)
+    }
+  })
+}
+
+function selectTvGuidePrograms(programs) {
+  const exactPrograms = findTvGuideProgramCombination(shuffleArray(programs), 4)
+  return exactPrograms || fitTvGuidePrograms(shuffleArray(programs))
+}
+
+function findTvGuideProgramCombination(programs, targetColspan) {
+  if (targetColspan === 0) return []
+  if (targetColspan < 0 || !programs.length) return null
+
+  for (let index = 0; index < programs.length; index++) {
+    const program = programs[index]
+    const remainingPrograms = programs.slice(index + 1)
+    const nextPrograms = findTvGuideProgramCombination(remainingPrograms, targetColspan - program.colspan)
+    if (nextPrograms) return [program, ...nextPrograms]
   }
+
+  return null
 }
 
 function fitTvGuidePrograms(programs) {
@@ -329,10 +357,10 @@ function fitTvGuidePrograms(programs) {
 
   programs.forEach(program => {
     if (remainingColspan <= 0) return
+    if (program.colspan > remainingColspan) return
 
-    const colspan = Math.min(program.colspan, remainingColspan)
-    fitted.push({ ...program, colspan })
-    remainingColspan -= colspan
+    fitted.push(program)
+    remainingColspan -= program.colspan
   })
 
   if (remainingColspan > 0) {
@@ -340,6 +368,11 @@ function fitTvGuidePrograms(programs) {
   }
 
   return fitted
+}
+
+function normalizePositiveInteger(value, defaultValue) {
+  const number = Number(value)
+  return Number.isFinite(number) && number > 0 ? Math.round(number) : defaultValue
 }
 
 function normalizeTvGuideText(value) {

@@ -5,3 +5,4 @@ config/*
 config/*.tmp
 node_modules/*
 TO-DO.md
+temp/*
