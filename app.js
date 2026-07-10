@@ -29,6 +29,8 @@ const SOUND_COMPLETION_BUFFER_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPL
 const NEWS_CHYRON_ROTATE_INTERVAL_MS = numberOrDefault(process.env.NEWS_CHYRON_ROTATE_INTERVAL_MS, 30000)
 const NEWS_CHYRON_ITEMS_DEFAULT = process.env.NEWS_CHYRON_ITEMS_DEFAULT || 'config/news-chyron.example.json'
 const NEWS_CHYRON_ITEMS = readNewsChyronItems()
+const TV_GUIDE_ITEMS_DEFAULT = process.env.TV_GUIDE_ITEMS_DEFAULT || 'config/tv-guide.example.json'
+const TV_GUIDE_ITEMS = readTvGuideItems()
 const ALLOWED_ORIGINS = new Set([
   `http://localhost:${PORT}`,
   `http://127.0.0.1:${PORT}`
@@ -221,6 +223,160 @@ function normalizeChyronText(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function readTvGuideItems() {
+  const itemsSource = process.env.TV_GUIDE_ITEMS || 'config/tv-guide.json'
+
+  try {
+    const items = buildTvGuideItems(parseJsonConfigSource(itemsSource))
+    return items.length ? items : readDefaultTvGuideItems()
+  } catch (error) {
+    console.warn('TV_GUIDE_ITEMS must be a JSON object with channels and optional banners. Using default TV guide items.')
+    return readDefaultTvGuideItems()
+  }
+}
+
+function readDefaultTvGuideItems() {
+  try {
+    const items = buildTvGuideItems(parseJsonConfigSource(TV_GUIDE_ITEMS_DEFAULT))
+    if (items.length) return items
+  } catch (error) {
+    console.warn('TV_GUIDE_ITEMS_DEFAULT must be a JSON object with channels and optional banners.')
+  }
+
+  return [
+    {
+      type: 'channel',
+      number: '1',
+      name: 'VIPER',
+      titleLines: ['1', 'VIPER'],
+      programs: [
+        { titleLines: ['VIPERVERSE STUDIOS'], colspan: 4 }
+      ]
+    }
+  ]
+}
+
+function buildTvGuideItems(config) {
+  if (!config || typeof config !== 'object') return []
+
+  const channels = Array.isArray(config.channels)
+    ? config.channels.map(normalizeTvGuideChannel).filter(Boolean).map(randomizeTvGuidePrograms)
+    : []
+  const banners = Array.isArray(config.banners)
+    ? config.banners.map(normalizeTvGuideBanner).filter(Boolean)
+    : []
+
+  return channels.concat(banners)
+}
+
+function normalizeTvGuideChannel(channel) {
+  if (!channel || typeof channel !== 'object') return null
+
+  const number = String(channel.number ?? '').trim()
+  const name = normalizeTvGuideText(channel.name)
+  const programs = Array.isArray(channel.programs)
+    ? channel.programs.map(normalizeTvGuideProgram).filter(Boolean)
+    : []
+
+  if (!number || !name || !programs.length) return null
+
+  return {
+    type: 'channel',
+    number,
+    name,
+    titleLines: [number, name],
+    programs: fitTvGuidePrograms(programs)
+  }
+}
+
+function normalizeTvGuideProgram(program) {
+  if (!program || typeof program !== 'object') return null
+
+  const title = normalizeTvGuideText(program.title)
+  const colspan = Math.max(1, Math.min(4, Math.round(Number(program.colspan) || 1)))
+  if (!title) return null
+
+  return {
+    titleLines: title.split('\n'),
+    colspan
+  }
+}
+
+function normalizeTvGuideBanner(banner) {
+  const title = normalizeTvGuideText(banner)
+  if (!title) return null
+
+  return {
+    type: 'banner',
+    titleLines: title.split('\n')
+  }
+}
+
+function randomizeTvGuidePrograms(channel) {
+  return {
+    ...channel,
+    programs: fitTvGuidePrograms(shuffleArray(channel.programs))
+  }
+}
+
+function fitTvGuidePrograms(programs) {
+  const fitted = []
+  let remainingColspan = 4
+
+  programs.forEach(program => {
+    if (remainingColspan <= 0) return
+
+    const colspan = Math.min(program.colspan, remainingColspan)
+    fitted.push({ ...program, colspan })
+    remainingColspan -= colspan
+  })
+
+  if (remainingColspan > 0) {
+    fitted.push({ titleLines: [''], colspan: remainingColspan })
+  }
+
+  return fitted
+}
+
+function normalizeTvGuideText(value) {
+  return typeof value === 'string' ? value.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n') : ''
+}
+
+function parseJsonConfigSource(source) {
+  const trimmedSource = source.trim()
+  if (trimmedSource.startsWith('{') || trimmedSource.startsWith('[')) return JSON.parse(trimmedSource)
+
+  const filePath = path.isAbsolute(trimmedSource) ? trimmedSource : path.join(__dirname, trimmedSource)
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+}
+
+function shuffleArray(items) {
+  const shuffled = items.slice()
+
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    const item = shuffled[index]
+    shuffled[index] = shuffled[randomIndex]
+    shuffled[randomIndex] = item
+  }
+
+  return shuffled
+}
+
+function renderTvGuideLines(lines) {
+  return lines.map(escapeHtml).join('<br />')
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[character]))
+}
+
 function safeJsonForScript(value) {
   return JSON.stringify(value).replace(/</g, '\\u003c')
 }
@@ -312,7 +468,10 @@ app.get('/overlay/stream-border', (req, res) => {
 })
 
 app.get('/overlay/tv-guide', (req, res) => {
-  res.render('overlays/tv-guide.ejs')
+  res.render('overlays/tv-guide.ejs', {
+    renderTvGuideLines,
+    tvGuideItems: TV_GUIDE_ITEMS
+  })
 })
 
 app.get('/overlay/venom-coin', (req, res) => {

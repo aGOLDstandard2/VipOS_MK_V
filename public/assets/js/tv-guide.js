@@ -13,6 +13,11 @@ clone.classList.add('scroll-copy');
 // Inject it into the DOM
 elem.after(clone);
 
+function syncScrollDistance() {
+  var scrollDistance = elem.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--tv-guide-scroll-distance', '-' + scrollDistance + 'px');
+}
+
 function renderCurrentTime(){
   var date = new Date();
   var day = date.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true })
@@ -48,5 +53,7 @@ function renderFutureTimeSlots() {
   }
 }
 
+syncScrollDistance();
+window.addEventListener('resize', syncScrollDistance);
 renderCurrentTime();
 renderFutureTimeSlots();

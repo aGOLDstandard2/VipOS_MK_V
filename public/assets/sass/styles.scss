@@ -249,7 +249,7 @@ a:hover {color: var(--featured-color-hover);}
     top: 0;
 	}
   100% {
-    top: -3188px; //( + 122px for each new row added )
+    top: var(--tv-guide-scroll-distance, -3188px);
   }
 }
 
@@ -371,11 +371,13 @@ a:hover {color: var(--featured-color-hover);}
           font-family: "Segoe UI", sans-serif;
           font-size: 15px;
           font-weight: bolder;
+          opacity: 1;
           padding: 0 0 0 10px;
           color: #fff;
           letter-spacing: 1px;
           line-height: 29px;
           text-shadow: 0px 2px 0px #000000;
+          transition: opacity 500ms ease;
         }
       }
 
@@ -391,8 +393,10 @@ a:hover {color: var(--featured-color-hover);}
           font-family: 'Orbitron';
           color: #fff;
           letter-spacing: 1px;
+          opacity: 1;
           padding: 0 0 0 10px;
           text-shadow: 0px 2px 0px #000000;
+          transition: opacity 500ms ease;
         }
 
         h1 {
@@ -416,6 +420,14 @@ a:hover {color: var(--featured-color-hover);}
           position: absolute;
           top: 0;
           width: 100%;
+        }
+      }
+
+      &.is-fading {
+        #chyron-title h3,
+        #chyron-header h1,
+        #chyron-header h2 {
+          opacity: 0;
         }
       }
     }

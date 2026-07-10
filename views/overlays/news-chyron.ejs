@@ -28,9 +28,11 @@ const initialChyronItem = chyronItems[0];
     const title = document.getElementById('chyron-title-text');
     const headline = document.getElementById('chyron-headline-text');
     const subhead = document.getElementById('chyron-subhead-text');
+    const chyronText = document.getElementById('chyron-text');
+    const fadeDurationMs = 500;
     let currentIndex = 0;
 
-    if (!title || !headline || !subhead || items.length < 2 || rotateIntervalMs <= 0) return;
+    if (!title || !headline || !subhead || !chyronText || items.length < 2 || rotateIntervalMs <= 0) return;
 
     function getNextIndex() {
       let nextIndex = Math.floor(Math.random() * items.length);
@@ -44,9 +46,20 @@ const initialChyronItem = chyronItems[0];
       subhead.textContent = item.h2;
     }
 
+    function transitionToItem(item) {
+      chyronText.classList.add('is-fading');
+
+      window.setTimeout(() => {
+        renderItem(item);
+        window.requestAnimationFrame(() => {
+          chyronText.classList.remove('is-fading');
+        });
+      }, fadeDurationMs);
+    }
+
     window.setInterval(() => {
       currentIndex = getNextIndex();
-      renderItem(items[currentIndex]);
+      transitionToItem(items[currentIndex]);
     }, rotateIntervalMs);
   })();
 </script>

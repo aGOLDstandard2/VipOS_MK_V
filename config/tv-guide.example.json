@@ -1,0 +1,232 @@
+{
+  "channels": [
+    {
+      "number": 2,
+      "name": "GOLD",
+      "programs": [
+        { "title": "GET REKT\nMARK 4 STYLE", "colspan": 1 },
+        { "title": "THIS OLD\nGUITAR", "colspan": 1 },
+        { "title": "CHEWBACCA\nNOISES", "colspan": 1 },
+        { "title": "DEADLY\nREPTILE PALS", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 3,
+      "name": "LIMEY",
+      "programs": [
+        { "title": "THE RETRO\nLOUNGE", "colspan": 1 },
+        { "title": "L E G E N D", "colspan": 1 },
+        { "title": "FARMING\nHOUR", "colspan": 1 },
+        { "title": "BLIMEY\nTIMEY", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 4,
+      "name": "FINALBOSS",
+      "programs": [
+        { "title": "FF XIV\nADVENTURES", "colspan": 1 },
+        { "title": "DIABLO FAMILY HOUR", "colspan": 2 },
+        { "title": "MONSTER\nHUNTERS", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 5,
+      "name": "MADRUSH",
+      "programs": [
+        { "title": "HEROES OF\nDESTINY 2", "colspan": 1 },
+        { "title": "RAID SHADOW\nCRACK", "colspan": 1 },
+        { "title": "WRASSLIN'\nSTREAMERS", "colspan": 1 },
+        { "title": "COFFEE ADDICTS\nANONYMOUS", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 6,
+      "name": "ICEQUEEN",
+      "programs": [
+        { "title": "FIRE & ICE:\nA LOVE STORY", "colspan": 1 },
+        { "title": "DR BAN-LOVE or:\nHOW I LOVED THE HAMMER", "colspan": 2 },
+        { "title": "FORTNITE FRONTIERS", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 7,
+      "name": "TRWZDDD",
+      "programs": [
+        { "title": "CHRONO FIGURE\nIT ALL OUT", "colspan": 1 },
+        { "title": "CEREAL\nKILLER", "colspan": 1 },
+        { "title": "BUDTENDERS\nX-TREME", "colspan": 1 },
+        { "title": "STASIS\nFACTORY", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 8,
+      "name": "GEORDIE",
+      "programs": [
+        { "title": "SOMEWHAT HALF-ENGLISH\nBREAKFAST LUNCLHES", "colspan": 2 },
+        { "title": "WAYGU OF\nTHE FORCE", "colspan": 1 },
+        { "title": "LOCAL\nHERO", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 9,
+      "name": "TWC",
+      "programs": [
+        { "title": "WEATHER CHANNEL", "colspan": 2 },
+        { "title": "JOHNNY TSUNAMI\nRECAP", "colspan": 1 },
+        { "title": "WEATHER\nCHANNEL", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 10,
+      "name": "KITTYYYY",
+      "programs": [
+        { "title": "P0RNHUB W/ FRIENDS", "colspan": 1 },
+        { "title": "BABE STATION", "colspan": 1 },
+        { "title": "GTA ROLE PLAY HOUR", "colspan": 1 },
+        { "title": "REALMS O' MINECRAFT", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 11,
+      "name": "KLUTCH",
+      "programs": [
+        { "title": "BOTTOM\nGEAR", "colspan": 1 },
+        { "title": "BROKEN\nMONITORS", "colspan": 1 },
+        { "title": "TEAM\nSWAPPING!", "colspan": 1 },
+        { "title": "ANTHONY\nWATCH", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 12,
+      "name": "FANTASY",
+      "programs": [
+        { "title": "STREAMER\nSIMS", "colspan": 1 },
+        { "title": "WHAT IS\nHAPPENING?", "colspan": 1 },
+        { "title": "OKAY,\nBYEEEEEEEEEE", "colspan": 1 },
+        { "title": "FORTNITE\nHUNTER", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 13,
+      "name": "WILDCARD",
+      "programs": [
+        { "title": "LEAGUE OF\nROCKET CARS", "colspan": 1 },
+        { "title": "SURVIVING\nGREEN HELL", "colspan": 1 },
+        { "title": "HEIST LOVE\nFEAT BOB", "colspan": 1 },
+        { "title": "SEXY\nTIME ;)", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 14,
+      "name": "JOEYSCARY",
+      "programs": [
+        { "title": "CHEEKI\nBREEKI", "colspan": 1 },
+        { "title": "CANADA:\nMAPLE TAP 411", "colspan": 1 },
+        { "title": "BOATS & CASTLES\nOF THE RICH & FAMOUS", "colspan": 2 }
+      ]
+    },
+    {
+      "number": 15,
+      "name": "C3LTIC",
+      "programs": [
+        { "title": "MORTAL\nPORTALS", "colspan": 1 },
+        { "title": "ACME\nANVIL HOUR", "colspan": 1 },
+        { "title": "BOT HUNTER\n5000", "colspan": 1 },
+        { "title": "SWEET STREAM\nSTEAM DECK", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 16,
+      "name": "JOLA",
+      "programs": [
+        { "title": "MAMA JOLA'S\nCANNOLAS", "colspan": 1 },
+        { "title": "DOING YOUR PART\nFOR GREAT ART", "colspan": 2 },
+        { "title": "PUDDLE\nJUMPING", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 17,
+      "name": "VIPER",
+      "programs": [
+        { "title": "THE LEGEND OF THE\nLOST STEAK & EGGS", "colspan": 2 },
+        { "title": "VIPETTE\nMAKEOVERS", "colspan": 1 },
+        { "title": "STARSHIP\nBLOOPERS", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 18,
+      "name": "ROG3RBOT",
+      "programs": [
+        { "title": "PIRAT3\nSLOOPS", "colspan": 1 },
+        { "title": "POK3RBOT\nCHAMPIONS", "colspan": 1 },
+        { "title": "DANCE PARTY\nEXTRAVAGANZA", "colspan": 1 },
+        { "title": "SNEEZ3BURG3R\nCHEES3BURG3R", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 19,
+      "name": "NOGAR",
+      "programs": [
+        { "title": "SHUT THE\nGUNDAM DOOR", "colspan": 1 },
+        { "title": "NOGAR'S SUPER TOP\nFIFTY COUNTDOWN", "colspan": 2 },
+        { "title": "HORROR\nADORERS", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 20,
+      "name": "DIASEPH",
+      "programs": [
+        { "title": "TUNEFUL\nTUNESDAY", "colspan": 1 },
+        { "title": "ROAD\nTRIPPIN'", "colspan": 1 },
+        { "title": "THE FACE MACE'S\nPOWER PARAKEET HOUR", "colspan": 2 }
+      ]
+    },
+    {
+      "number": 21,
+      "name": "CONCEPT",
+      "programs": [
+        { "title": "FISH AND CHIPS WITH JERMARINE", "colspan": 2 },
+        { "title": "PHOTOS OF FISH AND CHIPS WITH JERMARINE", "colspan": 2 }
+      ]
+    },
+    {
+      "number": 22,
+      "name": "SHOE",
+      "programs": [
+        { "title": "AUDIO ANOMALIES", "colspan": 3 },
+        { "title": "SHOE'S\nCLUES", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 23,
+      "name": "MIGALICI",
+      "programs": [
+        { "title": "BRAIN REBOOTS", "colspan": 1 },
+        { "title": "HOW DOES I SHOT WEB?", "colspan": 1 },
+        { "title": "YES, WE WILL KILL GOD\nJRPG POWER HOUR", "colspan": 2 }
+      ]
+    },
+    {
+      "number": 24,
+      "name": "SN4K3Y",
+      "programs": [
+        { "title": "SNEAKY SNAKE-TASTIC", "colspan": 1 },
+        { "title": "THE PERFECT SPICE BAG", "colspan": 1 },
+        { "title": "RETIRE FROM FORTNITE", "colspan": 1 },
+        { "title": "A GUIDE TO BEING SNEAKY", "colspan": 1 }
+      ]
+    },
+    {
+      "number": 25,
+      "name": "SSTATUE",
+      "programs": [
+        { "title": "OVERWATCHING FOR OMNICS", "colspan": 1 },
+        { "title": "A CAT TOOK\nOVER THIS CHANNEL, HELP!", "colspan": 2 },
+        { "title": "SAVING THE CHRONOVERSE", "colspan": 1 }
+      ]
+    }
+  ],
+  "banners": [
+    "VIPERVERSE STUDIOS"
+  ]
+}
