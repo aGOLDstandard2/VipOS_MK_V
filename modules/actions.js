@@ -123,11 +123,16 @@ function createActionRunner({
           throw userInputError('sound.pickRandom requires a safe contextKey')
         }
 
+        const configuredTextMap = loadSoundTextMap(soundTextFile, logger)
         const textMap = {
-          ...loadSoundTextMap(soundTextFile, logger),
+          ...configuredTextMap,
           ...normalizeSoundTextMap(action.textMap || action.messages || action.labels)
         }
-        const pickedSound = pickRandomSound({ soundDirectory, textMap })
+        const pickedSound = pickRandomSound({
+          soundDirectory,
+          textMap,
+          eligibleFilenames: Object.keys(configuredTextMap)
+        })
         setPath(context, contextKey, pickedSound)
 
         return { type, contextKey, ...pickedSound }
@@ -324,7 +329,7 @@ function isViewerTriggeredContext(context = {}) {
   ].includes(context.source)
 }
 
-function pickRandomSound({ soundDirectory, textMap = {} }) {
+function pickRandomSound({ soundDirectory, textMap = {}, eligibleFilenames = [] }) {
   let entries
 
   try {
@@ -333,12 +338,14 @@ function pickRandomSound({ soundDirectory, textMap = {} }) {
     throw userInputError('sound.pickRandom could not read the local sound directory')
   }
 
+  const eligibleFilenameSet = new Set(eligibleFilenames)
   const filenames = entries
     .filter(entry => entry.isFile() && SOUND_FILE_PATTERN.test(entry.name))
+    .filter(entry => eligibleFilenameSet.has(entry.name))
     .map(entry => entry.name)
 
   if (!filenames.length) {
-    throw userInputError('sound.pickRandom found no local sound files ending in .mp3, .ogg, or .wav')
+    throw userInputError('sound.pickRandom found no configured sound files from sfx-text.json in the local sound directory')
   }
 
   const src = filenames[Math.floor(Math.random() * filenames.length)]
