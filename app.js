@@ -29,6 +29,10 @@ const SOUND_COMPLETION_BUFFER_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPL
 const NEWS_CHYRON_ROTATE_INTERVAL_MS = numberOrDefault(process.env.NEWS_CHYRON_ROTATE_INTERVAL_MS, 30000)
 const NEWS_CHYRON_ITEMS_DEFAULT = process.env.NEWS_CHYRON_ITEMS_DEFAULT || 'config/news-chyron.example.json'
 const NEWS_CHYRON_ITEMS = readNewsChyronItems()
+const NEWS_CHYRON_LOWER_THIRD_SLIDE_DISTANCE = cssLengthOrDefault(process.env.NEWS_CHYRON_LOWER_THIRD_SLIDE_DISTANCE, '140px')
+const NEWS_CHYRON_LOWER_THIRD_SLIDE_DURATION = cssTimeOrDefault(process.env.NEWS_CHYRON_LOWER_THIRD_SLIDE_DURATION, '600ms')
+const VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE = cssLengthOrDefault(process.env.VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE, '100%')
+const VENOM_COIN_LOWER_THIRD_SLIDE_DURATION = cssTimeOrDefault(process.env.VENOM_COIN_LOWER_THIRD_SLIDE_DURATION, '300ms')
 const TV_GUIDE_ITEMS_DEFAULT = process.env.TV_GUIDE_ITEMS_DEFAULT || 'config/tv-guide.example.json'
 const TV_GUIDE_ITEMS = readTvGuideItems()
 const ALLOWED_ORIGINS = new Set([
@@ -381,6 +385,16 @@ function safeJsonForScript(value) {
   return JSON.stringify(value).replace(/</g, '\\u003c')
 }
 
+function cssLengthOrDefault(value, defaultValue) {
+  const normalized = String(value || '').trim()
+  return /^-?\d+(?:\.\d+)?(?:px|%|vh|vw|rem|em)$/.test(normalized) ? normalized : defaultValue
+}
+
+function cssTimeOrDefault(value, defaultValue) {
+  const normalized = String(value || '').trim()
+  return /^\d+(?:\.\d+)?(?:ms|s)$/.test(normalized) ? normalized : defaultValue
+}
+
 
 /**
  * Check if the origin is allowed based on the ALLOWED_ORIGINS
@@ -459,7 +473,9 @@ app.get('/overlay/news-chyron', (req, res) => {
     loadSocket: true,
     chyronItems: NEWS_CHYRON_ITEMS,
     chyronItemsJson: safeJsonForScript(NEWS_CHYRON_ITEMS),
-    chyronRotateIntervalMs: NEWS_CHYRON_ROTATE_INTERVAL_MS
+    chyronRotateIntervalMs: NEWS_CHYRON_ROTATE_INTERVAL_MS,
+    lowerThirdSlideDistance: NEWS_CHYRON_LOWER_THIRD_SLIDE_DISTANCE,
+    lowerThirdSlideDuration: NEWS_CHYRON_LOWER_THIRD_SLIDE_DURATION
   })
 })
 
@@ -475,7 +491,11 @@ app.get('/overlay/tv-guide', (req, res) => {
 })
 
 app.get('/overlay/venom-coin', (req, res) => {
-  res.render('overlays/venom-coin.ejs')
+  res.render('overlays/venom-coin.ejs', {
+    loadSocket: true,
+    lowerThirdSlideDistance: VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE,
+    lowerThirdSlideDuration: VENOM_COIN_LOWER_THIRD_SLIDE_DURATION
+  })
 })
 
 
@@ -597,6 +617,24 @@ app.post('/api/v1/bg-reset', asyncHandler(async (req, res) => {
   ], {
     completionDelayMs: getRequestCompletionDelay(req),
     fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+  })
+}))
+
+app.post('/api/v1/lower-third/hide', asyncHandler(async (req, res) => {
+  enqueueApiActions(res, 'Hide Lower Third', { type: 'overlay.emit', event: 'lower-third-hide' }, {
+    completionDelayMs: getRequestCompletionDelay(req)
+  })
+}))
+
+app.post('/api/v1/lower-third/show', asyncHandler(async (req, res) => {
+  enqueueApiActions(res, 'Show Lower Third', { type: 'overlay.emit', event: 'lower-third-show' }, {
+    completionDelayMs: getRequestCompletionDelay(req)
+  })
+}))
+
+app.post('/api/v1/lower-third/toggle', asyncHandler(async (req, res) => {
+  enqueueApiActions(res, 'Toggle Lower Third', { type: 'overlay.emit', event: 'lower-third-toggle' }, {
+    completionDelayMs: getRequestCompletionDelay(req)
   })
 }))
 

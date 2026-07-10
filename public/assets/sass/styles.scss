@@ -29,6 +29,18 @@ body {
   color: var(--text-color);
 }
 
+[data-lower-third] {
+  --lower-third-slide-distance: 100%;
+  --lower-third-slide-duration: 600ms;
+
+  transition: transform var(--lower-third-slide-duration) ease;
+  will-change: transform;
+
+  &.is-lower-third-hidden {
+    transform: translateY(var(--lower-third-slide-distance));
+  }
+}
+
 a {color: var(--featured-color);}
 a:hover {color: var(--featured-color-hover);}
 

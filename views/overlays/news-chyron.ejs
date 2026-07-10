@@ -5,7 +5,11 @@ const initialChyronItem = chyronItems[0];
 %>
 
 <div id="chyron-container">
-  <div id="chyron">
+  <div
+    id="chyron"
+    data-lower-third
+    style="--lower-third-slide-distance: <%= lowerThirdSlideDistance %>; --lower-third-slide-duration: <%= lowerThirdSlideDuration %>;"
+  >
     <div id="logo-box"></div>
 
     <div id="chyron-text">
@@ -63,5 +67,6 @@ const initialChyronItem = chyronItems[0];
     }, rotateIntervalMs);
   })();
 </script>
+<script type="text/javascript" src="/assets/js/lower-third.js"></script>
 
 <%- include("../templates/footer") %>

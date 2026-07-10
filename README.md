@@ -24,6 +24,16 @@ NEWS_CHYRON_ITEMS_DEFAULT=config/news-chyron.example.json
 # NEWS_CHYRON_ITEMS=config/news-chyron.json
 ```
 
+## Lower Third Slide
+The news chyron and Venom Coin overlays share the same hide/show events, but each has independent slide tuning in `.env`:
+
+```env
+NEWS_CHYRON_LOWER_THIRD_SLIDE_DISTANCE=140px
+NEWS_CHYRON_LOWER_THIRD_SLIDE_DURATION=600ms
+VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE=100%
+VENOM_COIN_LOWER_THIRD_SLIDE_DURATION=300ms
+```
+
 ## Control Panel
 The control panel includes configured macro buttons, action queue controls, OBS scene/source/input discovery, manual overlay controls, chat messages, and the raw action runner.
 

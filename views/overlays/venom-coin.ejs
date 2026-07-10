@@ -1,9 +1,15 @@
 <%- include("../templates/header") %>
 
-<video id="venom-coin" muted>
+<video
+  id="venom-coin"
+  muted
+  data-lower-third
+  style="--lower-third-slide-distance: <%= lowerThirdSlideDistance %>; --lower-third-slide-duration: <%= lowerThirdSlideDuration %>;"
+>
   <source src="/assets/video/venom-coin-stream-badge.mp4" type="video/mp4" />
 </video>
 
 <script type="text/javascript" src="/assets/js/venom-coin.js"></script>
+<script type="text/javascript" src="/assets/js/lower-third.js"></script>
 
 <%- include("../templates/footer") %>
