@@ -25,13 +25,14 @@ NEWS_CHYRON_ITEMS_DEFAULT=config/news-chyron.example.json
 ```
 
 ## Lower Third Slide
-The news chyron and Venom Coin overlays share the same hide/show events, but each has independent slide tuning in `.env`:
+The news chyron and Venom Coin overlays share the same hide/show events and a server-synced automatic toggle timer. Each overlay has independent slide tuning in `.env`:
 
 ```env
 NEWS_CHYRON_LOWER_THIRD_SLIDE_DISTANCE=140px
 NEWS_CHYRON_LOWER_THIRD_SLIDE_DURATION=600ms
 VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE=100%
 VENOM_COIN_LOWER_THIRD_SLIDE_DURATION=300ms
+LOWER_THIRD_TOGGLE_INTERVAL_MS=180000
 ```
 
 ## Control Panel
@@ -41,7 +42,7 @@ Copy `config/macros.example.json` to `config/macros.json` and edit the productio
 
 The Sound control searches local `.mp3`, `.ogg`, and `.wav` files under `public/assets/sounds`, including subdirectories, and shows detected duration labels from `GET /api/v1/sounds`.
 
-Macros, standard control-panel actions, and Twitch-triggered actions run through the action queue so common stream moments do not stack alerts or OBS actions on top of each other. The queue can be paused, resumed, skipped, or cleared from the control panel, and the queue activity log shows recent queued, started, completed, failed, skipped, cleared, paused, and resumed events.
+Macros, alert/border control-panel actions, and Twitch-triggered actions run through the action queue so common stream moments do not stack alerts or OBS actions on top of each other. The synced lower-third controls emit immediately. The queue can be paused, resumed, skipped, or cleared from the control panel, and the queue activity log shows recent queued, started, completed, failed, skipped, cleared, paused, and resumed events.
 
 Quiet Mode can be toggled from the control panel or with `POST /api/v1/quiet-mode/on`, `POST /api/v1/quiet-mode/off`, and `POST /api/v1/quiet-mode/toggle`. When enabled, viewer-triggered Twitch/chat alert and sound actions are suppressed while manual API actions and OBS controls remain available.
 

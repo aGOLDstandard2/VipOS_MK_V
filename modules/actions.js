@@ -44,7 +44,8 @@ function createActionRunner({
   quietMode = null,
   defaultAlertSound = process.env.DEFAULT_ALERT_SOUND || DEFAULT_ALERT_SOUND,
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
-  soundTextFile = DEFAULT_SOUND_TEXT_FILE
+  soundTextFile = DEFAULT_SOUND_TEXT_FILE,
+  overlayEmit = (event, payload) => io.emit(event, payload)
 }) {
   let chatService = null
 
@@ -93,7 +94,7 @@ function createActionRunner({
         const event = hydrate(action.event, context)
         if (!event) throw new Error('overlay.emit requires an event')
         const payload = hydrate(action.payload || {}, context)
-        io.emit(event, payload)
+        overlayEmit(event, payload)
         return { type, event, payload }
       }
 

@@ -14,7 +14,7 @@
       ]
     },
     {
-      "name": "GALAXY ONE",
+      "name": "GALAXY1",
       "programs": [
         { "title": "THE LAST\nSPACE DINER", "colspan": 2 },
         { "title": "NEBULA\nPATROL", "colspan": 1 },
@@ -390,7 +390,7 @@
         { "title": "THE MEN IN\nSLACK", "colspan": 1 },
         { "title": "CLASSIFIED\nAFTER HOURS", "colspan": 1 },
         { "title": "ALIENS ATE MY\nHOMEWORK", "colspan": 1 },
-        { "title": "BLACK HELICOPTER\nREPORT", "colspan": 1 }
+        { "title": "UNMARKED\nVANS", "colspan": 1 }
       ]
     },
     {
@@ -494,7 +494,7 @@
       ]
     },
     {
-      "name": "WEATHER X-TREME",
+      "name": "X-WEATHER",
       "programs": [
         { "title": "WEATHER\nWITH LASERS", "colspan": 2 },
         { "title": "PARTLY\nNEON", "colspan": 1 },

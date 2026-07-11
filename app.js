@@ -29,6 +29,7 @@ const SOUND_COMPLETION_BUFFER_MS = numberOrDefault(process.env.QUEUE_SOUND_COMPL
 const NEWS_CHYRON_ROTATE_INTERVAL_MS = numberOrDefault(process.env.NEWS_CHYRON_ROTATE_INTERVAL_MS, 30000)
 const NEWS_CHYRON_ITEMS_DEFAULT = process.env.NEWS_CHYRON_ITEMS_DEFAULT || 'config/news-chyron.example.json'
 const NEWS_CHYRON_ITEMS = readNewsChyronItems()
+const LOWER_THIRD_TOGGLE_INTERVAL_MS = numberOrDefault(process.env.LOWER_THIRD_TOGGLE_INTERVAL_MS, 3 * 60 * 1000)
 const NEWS_CHYRON_LOWER_THIRD_SLIDE_DISTANCE = cssLengthOrDefault(process.env.NEWS_CHYRON_LOWER_THIRD_SLIDE_DISTANCE, '140px')
 const NEWS_CHYRON_LOWER_THIRD_SLIDE_DURATION = cssTimeOrDefault(process.env.NEWS_CHYRON_LOWER_THIRD_SLIDE_DURATION, '600ms')
 const VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE = cssLengthOrDefault(process.env.VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE, '100%')
@@ -54,10 +55,11 @@ const io = new Server(server, {
     }
   }
 })
+const lowerThirdSync = createLowerThirdSync(io, LOWER_THIRD_TOGGLE_INTERVAL_MS)
 
 const obs = createObsService()
 const greetings = createGreetingService()
-const actions = createActionRunner({ io, obs, greetings, quietMode })
+const actions = createActionRunner({ io, obs, greetings, quietMode, overlayEmit: lowerThirdSync.emitOverlayEvent })
 const actionQueue = createActionQueue({
   actions,
   soundCompletionBufferMs: SOUND_COMPLETION_BUFFER_MS,
@@ -165,6 +167,68 @@ function createQuietMode() {
     isEnabled: () => enabled,
     set,
     toggle: () => set(!enabled)
+  }
+}
+
+function createLowerThirdSync(io, toggleIntervalMs) {
+  let hidden = false
+  let timer = null
+
+  function emitState(event = 'lower-third-toggle') {
+    io.emit(event, { hidden })
+  }
+
+  function setHidden(nextHidden, event) {
+    hidden = Boolean(nextHidden)
+    emitState(event)
+    return getStatus()
+  }
+
+  function toggle() {
+    hidden = !hidden
+    emitState()
+    return getStatus()
+  }
+
+  function emitOverlayEvent(event, payload = {}) {
+    if (event === 'lower-third-hide') return setHidden(true, event)
+    if (event === 'lower-third-show') return setHidden(false, event)
+    if (event === 'lower-third-toggle') {
+      if (payload && typeof payload.hidden === 'boolean') return setHidden(payload.hidden, event)
+      return toggle()
+    }
+
+    io.emit(event, payload)
+  }
+
+  function getStatus() {
+    return {
+      hidden,
+      toggleIntervalMs
+    }
+  }
+
+  io.on('connection', socket => {
+    socket.emit('lower-third-sync', { hidden })
+    socket.on('lower-third-sync-request', () => {
+      socket.emit('lower-third-sync', { hidden })
+    })
+  })
+
+  if (toggleIntervalMs > 0) {
+    timer = setInterval(toggle, toggleIntervalMs)
+  }
+
+  return {
+    getStatus,
+    emitOverlayEvent,
+    hide: () => setHidden(true, 'lower-third-hide'),
+    show: () => setHidden(false, 'lower-third-show'),
+    stop: () => {
+      if (timer) clearInterval(timer)
+      timer = null
+    },
+    toggle
   }
 }
 
@@ -547,6 +611,7 @@ app.get('/api/v1/status', (req, res) => {
     chat: chat.getStatus(),
     greetings: greetings.getStatus(),
     quietMode: quietMode.getStatus(),
+    lowerThird: lowerThirdSync.getStatus(),
     queue: actionQueue.getStatus(),
     raffle: raffle.getStatus(),
     sockets: {
@@ -654,21 +719,15 @@ app.post('/api/v1/bg-reset', asyncHandler(async (req, res) => {
 }))
 
 app.post('/api/v1/lower-third/hide', asyncHandler(async (req, res) => {
-  enqueueApiActions(res, 'Hide Lower Third', { type: 'overlay.emit', event: 'lower-third-hide' }, {
-    completionDelayMs: getRequestCompletionDelay(req)
-  })
+  res.json({ ok: true, lowerThird: lowerThirdSync.hide() })
 }))
 
 app.post('/api/v1/lower-third/show', asyncHandler(async (req, res) => {
-  enqueueApiActions(res, 'Show Lower Third', { type: 'overlay.emit', event: 'lower-third-show' }, {
-    completionDelayMs: getRequestCompletionDelay(req)
-  })
+  res.json({ ok: true, lowerThird: lowerThirdSync.show() })
 }))
 
 app.post('/api/v1/lower-third/toggle', asyncHandler(async (req, res) => {
-  enqueueApiActions(res, 'Toggle Lower Third', { type: 'overlay.emit', event: 'lower-third-toggle' }, {
-    completionDelayMs: getRequestCompletionDelay(req)
-  })
+  res.json({ ok: true, lowerThird: lowerThirdSync.toggle() })
 }))
 
 app.post('/api/v1/text', asyncHandler(async (req, res) => {
