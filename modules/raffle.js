@@ -144,6 +144,8 @@ function createRaffleService({
   }
 
   async function handleChatMessage(context = {}) {
+    if (!state.enabled) return false
+
     const command = getCommandName(context.message)
     if (!command) return false
 
