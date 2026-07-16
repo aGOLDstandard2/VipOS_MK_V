@@ -1,7 +1,8 @@
 <%- include("../templates/header") %>
 
 <%
-const initialChyronItem = chyronItems[0];
+const initialChyronIndex = Math.floor(Math.random() * chyronItems.length);
+const initialChyronItem = chyronItems[initialChyronIndex];
 %>
 
 <div id="chyron-container">
@@ -34,7 +35,7 @@ const initialChyronItem = chyronItems[0];
     const subhead = document.getElementById('chyron-subhead-text');
     const chyronText = document.getElementById('chyron-text');
     const fadeDurationMs = 500;
-    let currentIndex = 0;
+    let currentIndex = <%- JSON.stringify(initialChyronIndex) %>;
 
     if (!title || !headline || !subhead || !chyronText || items.length < 2 || rotateIntervalMs <= 0) return;
 
