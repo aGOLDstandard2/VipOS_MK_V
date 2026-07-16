@@ -30,22 +30,37 @@ const initialChyronItem = chyronItems[initialChyronIndex];
   (() => {
     const items = <%- chyronItemsJson %>;
     const rotateIntervalMs = <%- JSON.stringify(chyronRotateIntervalMs) %>;
+    const chyron = document.getElementById('chyron');
     const title = document.getElementById('chyron-title-text');
     const headline = document.getElementById('chyron-headline-text');
     const subhead = document.getElementById('chyron-subhead-text');
     const chyronText = document.getElementById('chyron-text');
     const fadeDurationMs = 500;
-    let currentIndex = <%- JSON.stringify(initialChyronIndex) %>;
+    const chyronItemsMax = items.length;
+    let currentIndex = 0;
+    const usedItems = [];
 
     if (!title || !headline || !subhead || !chyronText || items.length < 2 || rotateIntervalMs <= 0) return;
 
-    function getNextIndex() {
-      let nextIndex = Math.floor(Math.random() * items.length);
-      if (nextIndex === currentIndex) nextIndex = (nextIndex + 1) % items.length;
-      return nextIndex;
+    chyron.animate({width: '48%'}, {duration: fadeDurationMs, fill: 'forwards'});
+
+    function chyronHandler() {
+      if (items.length === 0) {
+        chyron.animate({width: '0'}, {duration: fadeDurationMs, fill: 'forwards'});
+        for (let i = 0; i < usedItems.length; i++) {
+          items.push(usedItems[i]);
+        }
+        usedItems.length = 0;
+        window.setTimeout(() => {
+          chyron.animate({width: '48%'}, {duration: fadeDurationMs, fill: 'forwards'});
+        }, rotateIntervalMs * 2);
+        return true;
+      }
+      return false;
     }
 
     function renderItem(item) {
+      if (!item || !item.h3) return;
       title.textContent = item.h3;
       headline.textContent = item.h1;
       subhead.textContent = item.h2;
@@ -53,7 +68,6 @@ const initialChyronItem = chyronItems[initialChyronIndex];
 
     function transitionToItem(item) {
       chyronText.classList.add('is-fading');
-
       window.setTimeout(() => {
         renderItem(item);
         window.requestAnimationFrame(() => {
@@ -62,12 +76,21 @@ const initialChyronItem = chyronItems[initialChyronIndex];
       }, fadeDurationMs);
     }
 
-    window.setInterval(() => {
-      currentIndex = getNextIndex();
-      transitionToItem(items[currentIndex]);
-    }, rotateIntervalMs);
+    function triggerNext() {
+      if (chyronHandler()) return;
+      currentIndex = Math.floor(Math.random() * items.length);
+      const selectedItem = items[currentIndex];
+      usedItems.push(selectedItem);
+      items.splice(currentIndex, 1);
+      transitionToItem(selectedItem);
+    }
+
+    triggerNext();
+
+    window.setInterval(triggerNext, rotateIntervalMs);
   })();
 </script>
 <script type="text/javascript" src="/assets/js/lower-third.js"></script>
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 
 <%- include("../templates/footer") %>
