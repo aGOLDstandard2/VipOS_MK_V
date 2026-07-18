@@ -60,6 +60,54 @@ function withEnv(overrides, fn) {
   }
 }
 
+async function waitFor(predicate, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs
+
+  while (Date.now() < deadline) {
+    if (predicate()) return
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+
+  assert.fail('Timed out waiting for condition')
+}
+
+function createTwurpleStub({ getTokenInfo }) {
+  class ApiClient {
+    constructor() {
+      this.users = {
+        getUserById: async id => ({ id, name: 'bot' }),
+        getUserByName: async name => ({ id: 'channel-123', name })
+      }
+    }
+  }
+
+  class EventSubWsListener {
+    constructor() {
+      this.isActive = false
+    }
+
+    onChannelChatMessage() {}
+    onRevoke() {}
+    onSubscriptionCreateFailure() {}
+    onSubscriptionCreateSuccess() {}
+    onUserSocketConnect() {}
+    onUserSocketDisconnect() {}
+    start() {
+      this.isActive = true
+    }
+    stop() {
+      this.isActive = false
+    }
+  }
+
+  return {
+    ApiClient,
+    EventSubWsListener,
+    StaticAuthProvider: class StaticAuthProvider {},
+    getTokenInfo
+  }
+}
+
 test('configured EventSub handler groups match restart-warning group names', () => {
   const groups = getConfiguredEventSubHandlerGroups({
     automaticRedemptionHandlerCount: 1,
@@ -226,6 +274,7 @@ test('chat startup does not schedule retry for malformed Twitch token files', as
       TWITCH_TOKEN_FILE: tokenFile
     }, async () => {
       const errors = []
+      let readyCount = 0
       const chat = createChatService({
         actions: {},
         logger: {
@@ -234,6 +283,9 @@ test('chat startup does not schedule retry for malformed Twitch token files', as
           },
           log() {},
           warn() {}
+        },
+        onReady() {
+          readyCount += 1
         }
       })
 
@@ -243,6 +295,7 @@ test('chat startup does not schedule retry for malformed Twitch token files', as
       assert.equal(status.nextRetryAt, null)
       assert.match(status.lastError, /Failed to load Twitch token file/)
       assert.equal(errors.length, 1)
+      assert.equal(readyCount, 0)
     })
   })
 })
@@ -267,6 +320,7 @@ test('chat startup does not schedule retry for missing Twitch token config', asy
       TWITCH_TOKEN_FILE: tokenFile
     }, async () => {
       const errors = []
+      let readyCount = 0
       const chat = createChatService({
         actions: {},
         logger: {
@@ -275,6 +329,9 @@ test('chat startup does not schedule retry for missing Twitch token config', asy
           },
           log() {},
           warn() {}
+        },
+        onReady() {
+          readyCount += 1
         }
       })
 
@@ -284,6 +341,102 @@ test('chat startup does not schedule retry for missing Twitch token config', asy
       assert.equal(status.nextRetryAt, null)
       assert.match(status.lastError, /TWITCH_BOT_ACCESS_TOKEN and TWITCH_BOT_REFRESH_TOKEN/)
       assert.equal(errors.length, 1)
+      assert.equal(readyCount, 0)
+    })
+  })
+})
+
+test('chat retries a temporary startup failure before notifying readiness', async () => {
+  await withTempDirectory(async directory => {
+    const commandsFile = path.join(directory, 'commands.json')
+    const tokenFile = path.join(directory, 'missing-token.json')
+    fs.writeFileSync(commandsFile, '{"commands":[]}')
+
+    await withEnv({
+      CHAT_COMMANDS_FILE: commandsFile,
+      CHAT_ENABLE_REDEMPTIONS: 'false',
+      CHAT_ENABLED: 'true',
+      CHAT_RECONNECT_INITIAL_MS: '1',
+      CHAT_RECONNECT_MAX_MS: '1',
+      TWITCH_BOT_ACCESS_TOKEN: 'test-access-token',
+      TWITCH_BOT_REFRESH_TOKEN: undefined,
+      TWITCH_BOT_TOKEN: undefined,
+      TWITCH_CHANNEL: 'test-channel',
+      TWITCH_CLIENT_ID: 'test-client-id',
+      TWITCH_TOKEN_FILE: tokenFile
+    }, async () => {
+      let readyCount = 0
+      let tokenInfoCalls = 0
+      const chat = createChatService({
+        actions: {},
+        logger: { error() {}, log() {}, warn() {} },
+        onReady() {
+          readyCount += 1
+        },
+        twurpleLoader: async () => createTwurpleStub({
+          async getTokenInfo() {
+            tokenInfoCalls += 1
+            if (tokenInfoCalls === 1) throw new Error('temporary Twitch API failure')
+            return { scopes: [], userId: 'bot-123' }
+          }
+        })
+      })
+
+      await chat.start()
+      assert.equal(readyCount, 0)
+      assert.equal(chat.getStatus().started, false)
+
+      await waitFor(() => readyCount === 1)
+
+      assert.equal(tokenInfoCalls, 2)
+      assert.equal(chat.getStatus().started, true)
+      chat.stop()
+    })
+  })
+})
+
+test('chat logs rejected asynchronous readiness handlers without failing startup', async () => {
+  await withTempDirectory(async directory => {
+    const commandsFile = path.join(directory, 'commands.json')
+    const tokenFile = path.join(directory, 'missing-token.json')
+    fs.writeFileSync(commandsFile, '{"commands":[]}')
+
+    await withEnv({
+      CHAT_COMMANDS_FILE: commandsFile,
+      CHAT_ENABLE_REDEMPTIONS: 'false',
+      CHAT_ENABLED: 'true',
+      TWITCH_BOT_ACCESS_TOKEN: 'test-access-token',
+      TWITCH_BOT_REFRESH_TOKEN: undefined,
+      TWITCH_BOT_TOKEN: undefined,
+      TWITCH_CHANNEL: 'test-channel',
+      TWITCH_CLIENT_ID: 'test-client-id',
+      TWITCH_TOKEN_FILE: tokenFile
+    }, async () => {
+      const errors = []
+      const chat = createChatService({
+        actions: {},
+        logger: {
+          error(message) {
+            errors.push(message)
+          },
+          log() {},
+          warn() {}
+        },
+        async onReady() {
+          throw new Error('raffle recovery failed')
+        },
+        twurpleLoader: async () => createTwurpleStub({
+          async getTokenInfo() {
+            return { scopes: [], userId: 'bot-123' }
+          }
+        })
+      })
+
+      await chat.start()
+
+      assert.equal(chat.getStatus().started, true)
+      assert.deepEqual(errors, ['Twitch chat ready handler failed: raffle recovery failed'])
+      chat.stop()
     })
   })
 })

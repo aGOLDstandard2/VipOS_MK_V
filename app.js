@@ -80,9 +80,14 @@ function createRuntimeServices({ io }) {
       return actions.run(actionList, { ...context, source: 'raffle' })
     }
   })
-  const chat = createChatService({ actions, actionQueue, raffle })
+  const chat = createChatService({
+    actions,
+    actionQueue,
+    // Restored raffles may announce through chat, so recover their timers only once it is usable.
+    onReady: () => raffle.startTimers(),
+    raffle
+  })
   actions.setChatService(chat)
-  raffle.startTimers()
 
   return {
     actions,
@@ -96,6 +101,12 @@ function createRuntimeServices({ io }) {
     quietMode,
     raffle
   }
+}
+
+async function startRuntimeServices({ chat, obs, raffle }) {
+  obs.connect()
+  await chat.start()
+  if (!chat.getStatus().enabled) raffle.startTimers()
 }
 
 function createQuietMode() {
@@ -937,8 +948,7 @@ function startServer({ port = PORT } = {}) {
 
   server.listen(port, '127.0.0.1', async () => {
     console.log(`server is listening on port ${port}....`)
-    services.obs.connect()
-    services.chat.start()
+    await startRuntimeServices(services)
   })
 
   return { app, server, services }
@@ -953,5 +963,6 @@ module.exports = {
   createApp,
   createRuntimeServices,
   createSocketServer,
+  startRuntimeServices,
   startServer
 }

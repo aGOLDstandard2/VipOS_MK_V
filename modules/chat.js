@@ -17,7 +17,7 @@ const SUBSCRIPTION_SCOPES = ['channel:read:subscriptions']
 
 let twurpleModules = null
 
-function createChatService({ actions, actionQueue = null, logger = console, raffle = null } = {}) {
+function createChatService({ actions, actionQueue = null, logger = console, onReady = null, raffle = null, twurpleLoader = loadTwurple } = {}) {
   if (!actions) throw new Error('Chat service requires an action runner')
 
   const config = readConfig()
@@ -119,7 +119,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
     try {
       await loadCommands()
 
-      const twurple = await loadTwurple()
+      const twurple = await twurpleLoader()
       const auth = await createAuthProvider(twurple, config, logger, getEventSubAuthRequirements({
         config,
         followHandlers,
@@ -171,6 +171,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       state.started = true
       state.lastError = null
       resetRetry()
+      await notifyReady()
       logger.log(`Twitch chat listener starting for #${state.broadcasterName} as ${state.botUserName}`)
     } catch (error) {
       state.lastError = error.message
@@ -233,6 +234,16 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
   function clearRetry() {
     if (retryTimer) clearTimeout(retryTimer)
     retryTimer = null
+  }
+
+  async function notifyReady() {
+    if (typeof onReady !== 'function') return
+
+    try {
+      await onReady()
+    } catch (error) {
+      logger.error(`Twitch chat ready handler failed: ${error.message}`)
+    }
   }
 
   async function say(message, options = {}) {
