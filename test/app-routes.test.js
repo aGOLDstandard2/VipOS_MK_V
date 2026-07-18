@@ -381,6 +381,21 @@ test('/api/v1/sound enqueues existing sound files', async () => {
   })
 })
 
+test('direct and queued actions reject structural errors with HTTP 400', async () => {
+  const { services } = createRealQueueServices()
+  const app = createApp(services)
+
+  await withTestServer(app, async baseUrl => {
+    const direct = await postJson(baseUrl, '/api/v1/actions/run', { type: 'unknown.action' })
+    const queued = await postJson(baseUrl, '/api/v1/actions/enqueue', { type: 'overlay.alert' })
+
+    assert.equal(direct.response.status, 400)
+    assert.match(direct.payload.error, /Unknown action type/)
+    assert.equal(queued.response.status, 400)
+    assert.match(queued.payload.error, /overlay.alert requires message/)
+  })
+})
+
 test('configured application port controls status and local-origin checks', async () => {
   const configuredPort = 54321
   const { enqueued, services } = createFakeServices()

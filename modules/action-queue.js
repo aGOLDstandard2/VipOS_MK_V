@@ -26,6 +26,7 @@ function createActionQueue({
     fallbackCompletionDelayMs
   }) {
     if (!actionList) throw userInputError('Queue item requires actions')
+    if (typeof actions.validateStructure === 'function') actions.validateStructure(actionList)
 
     const manualCompletionDelayMs = completionDelayMs ?? delayMs
     const item = {

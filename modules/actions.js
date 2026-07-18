@@ -12,6 +12,20 @@ const SOUND_LIST_CACHE_TTL_MS = 5000
 const DEFAULT_LARGE_SOUND_WARNING_BYTES = 25 * 1024 * 1024
 const SOUND_FILE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 const SOUND_PATH_PATTERN = /^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
+const ACTION_TYPES = new Set([
+  'chat.say',
+  'context.pickRandom',
+  'delay',
+  'log',
+  'obs.media',
+  'obs.mute',
+  'obs.scene',
+  'obs.source',
+  'overlay.alert',
+  'overlay.emit',
+  'sound.pickRandom',
+  'sound.play'
+])
 
 const soundListCache = new Map()
 
@@ -81,7 +95,7 @@ function createActionRunner({
   }
 
   async function run(actions, context = {}) {
-    const actionList = Array.isArray(actions) ? actions : [actions]
+    const actionList = validateActionStructure(actions)
     const hasExplicitSoundAction = actionList.some(isSoundAction)
     const results = []
 
@@ -265,8 +279,56 @@ function createActionRunner({
 
   return {
     run,
-    setChatService
+    setChatService,
+    validateStructure: validateActionStructure
   }
+}
+
+function validateActionStructure(actions) {
+  const actionList = Array.isArray(actions) ? actions : [actions]
+  if (!actionList.length) throw userInputError('At least one action is required')
+
+  for (const action of actionList) {
+    if (!action || typeof action !== 'object' || Array.isArray(action)) {
+      throw userInputError('Action must be an object')
+    }
+
+    const type = action.type || action.action
+    if (typeof type !== 'string' || !type.trim()) {
+      throw userInputError('Action type is required')
+    }
+    if (!ACTION_TYPES.has(type)) {
+      throw userInputError(`Unknown action type: ${type}`)
+    }
+
+    validateRequiredActionFields(type, action)
+  }
+
+  return actionList
+}
+
+function validateRequiredActionFields(type, action) {
+  const requirements = {
+    'chat.say': [['message', 'text']],
+    'context.pickRandom': [['contextKey', 'key']],
+    'obs.media': [['input', 'source'], ['mediaAction', 'media', 'command']],
+    'obs.mute': [['input', 'source']],
+    'obs.scene': [['scene']],
+    'obs.source': [['source', 'input']],
+    'overlay.alert': [['message']],
+    'overlay.emit': [['event']],
+    'sound.play': [['src', 'path']]
+  }
+
+  for (const fields of requirements[type] || []) {
+    if (!fields.some(field => hasActionValue(action[field]))) {
+      throw userInputError(`${type} requires ${fields.join(' or ')}`)
+    }
+  }
+}
+
+function hasActionValue(value) {
+  return value !== undefined && value !== null && value !== ''
 }
 
 function hydrate(value, context) {
@@ -630,5 +692,6 @@ module.exports = {
   assertSoundFileExists,
   createActionRunner,
   listSoundFiles,
+  validateActionStructure,
   validateSoundSrc
 }

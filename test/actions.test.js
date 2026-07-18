@@ -4,7 +4,7 @@ const os = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
 
-const { assertSoundFileExists, createActionRunner, listSoundFiles } = require('../modules/actions')
+const { assertSoundFileExists, createActionRunner, listSoundFiles, validateActionStructure } = require('../modules/actions')
 
 function createNoopActionRunner() {
   return createActionRunner({
@@ -73,6 +73,21 @@ test('delay actions reject non-finite values', async () => {
     () => actions.run({ type: 'delay', ms: 'Infinity' }),
     error => error.statusCode === 400 && /finite millisecond/.test(error.message)
   )
+})
+
+test('action structure validation rejects unknown types and missing required fields', () => {
+  assert.throws(
+    () => validateActionStructure({ type: 'unknown.action' }),
+    error => error.statusCode === 400 && /Unknown action type/.test(error.message)
+  )
+  assert.throws(
+    () => validateActionStructure({ type: 'overlay.alert' }),
+    error => error.statusCode === 400 && /overlay.alert requires message/.test(error.message)
+  )
+  assert.doesNotThrow(() => validateActionStructure({
+    type: 'overlay.alert',
+    message: '{displayName} joined'
+  }))
 })
 
 test('delay actions cap positive waits at ten minutes', async () => {
