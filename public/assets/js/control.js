@@ -346,11 +346,12 @@ async function refreshQueue() {
   }
 }
 
-async function refreshSounds() {
+async function refreshSounds(options = {}) {
   if (!soundInputEl || !soundListEl) return;
 
   try {
-    const data = await getJson('/api/v1/sounds');
+    const endpoint = options.force ? '/api/v1/sounds?refresh=1' : '/api/v1/sounds';
+    const data = await getJson(endpoint);
     const sounds = data.sounds || [];
     soundListEl.innerHTML = sounds.map(sound => (
       `<option value="${escapeHtml(sound.src)}" label="${escapeHtml(formatSoundLabel(sound))}"></option>`
@@ -520,6 +521,10 @@ document.querySelectorAll('[data-refresh-status]').forEach(button => {
 
 document.querySelectorAll('[data-refresh-macros]').forEach(button => {
   button.addEventListener('click', refreshMacros);
+});
+
+document.querySelectorAll('[data-refresh-sounds]').forEach(button => {
+  button.addEventListener('click', () => refreshSounds({ force: true }));
 });
 
 document.querySelectorAll('[data-refresh-obs]').forEach(button => {

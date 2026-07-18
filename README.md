@@ -40,7 +40,7 @@ The control panel includes configured macro buttons, action queue controls, OBS 
 
 Copy `config/macros.example.json` to `config/macros.json` and edit the production macros for your stream. Each macro has an `id`, `name`, optional `description`, and `actions`.
 
-The Sound control searches local `.mp3`, `.ogg`, and `.wav` files under `public/assets/sounds`, including subdirectories, and shows detected duration labels from `GET /api/v1/sounds`.
+The Sound control searches local `.mp3`, `.ogg`, and `.wav` files under `public/assets/sounds`, including subdirectories, and shows detected duration labels from `GET /api/v1/sounds`. Sound listings are cached briefly; use the Sound panel refresh button or `GET /api/v1/sounds?refresh=1` to force a fresh directory scan.
 
 Macros, alert/border control-panel actions, and Twitch-triggered actions run through the action queue so common stream moments do not stack alerts or OBS actions on top of each other. The synced lower-third controls emit immediately. The queue can be paused, resumed, skipped, or cleared from the control panel, and the queue activity log shows recent queued, started, completed, failed, skipped, cleared, paused, and resumed events.
 

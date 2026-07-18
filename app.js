@@ -237,6 +237,11 @@ function numberOrDefault(value, defaultValue) {
   return Number.isFinite(number) && number >= 0 ? number : defaultValue
 }
 
+function parseBool(value, defaultValue) {
+  if (value === undefined || value === null || value === '') return defaultValue
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase())
+}
+
 function readNewsChyronItems() {
   const itemsSource = process.env.NEWS_CHYRON_ITEMS || NEWS_CHYRON_ITEMS_DEFAULT
 
@@ -665,7 +670,8 @@ app.post('/api/v1/raffle/close', (req, res) => {
 })
 
 app.get('/api/v1/sounds', (req, res) => {
-  res.json({ ok: true, sounds: listSoundFiles() })
+  const refresh = parseBool(req.query.refresh, false)
+  res.json({ ok: true, sounds: listSoundFiles({ cacheTtlMs: refresh ? 0 : undefined }) })
 })
 
 app.post('/api/v1/twitch/simulate/:type', asyncHandler(async (req, res) => {
