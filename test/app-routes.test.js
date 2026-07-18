@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const http = require('node:http')
+const os = require('node:os')
+const path = require('node:path')
 const test = require('node:test')
 
 const localDefaultAlertSound = process.env.DEFAULT_ALERT_SOUND
@@ -124,7 +127,7 @@ function createFakeServices() {
   }
 }
 
-function createRealQueueServices() {
+function createRealQueueServices(actionRunnerOptions = {}) {
   const emitted = []
   const io = {
     engine: { clientsCount: 0 },
@@ -171,6 +174,7 @@ function createRealQueueServices() {
     logger: { error() {}, log() {}, warn() {} },
     obs: {},
     quietMode,
+    ...actionRunnerOptions,
     overlayEmit: lowerThirdSync.emitOverlayEvent
   })
   const actionQueue = createActionQueue({
@@ -238,6 +242,21 @@ function createRealQueueServices() {
         }
       }
     }
+  }
+}
+
+function withTempDirectory(fn) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vipos-routes-'))
+  const cleanup = () => fs.rmSync(directory, { recursive: true, force: true })
+
+  try {
+    const result = fn(directory)
+    if (result && typeof result.then === 'function') return result.finally(cleanup)
+    cleanup()
+    return result
+  } catch (error) {
+    cleanup()
+    throw error
   }
 }
 
@@ -349,6 +368,39 @@ test('/api/v1/test runs the tracked default alert sound', async () => {
       emitted.find(item => item.event === 'sound-play'),
       { event: 'sound-play', payload: { src: 'example.mp3', volume: 1 } }
     )
+  })
+})
+
+test('/api/v1/sound-random uses the example text config when primary config is missing', async () => {
+  await withTempDirectory(async directory => {
+    const configDirectory = path.join(directory, 'config')
+    fs.mkdirSync(configDirectory)
+    fs.writeFileSync(path.join(configDirectory, 'sfx-text.example.json'), JSON.stringify({
+      'example.mp3': 'Example route sound'
+    }))
+
+    const { emitted, services } = createRealQueueServices({
+      soundTextFile: path.join(configDirectory, 'sfx-text.json')
+    })
+    const app = createApp(services)
+
+    await withTestServer(app, async baseUrl => {
+      const { payload, response } = await postJson(baseUrl, '/api/v1/sound-random', { completionDelayMs: 0 })
+
+      assert.equal(response.status, 200)
+      assert.equal(payload.ok, true)
+      assert.equal(payload.queued, true)
+
+      const historyItem = await waitForQueueHistory(
+        services.actionQueue,
+        item => item.name === 'Random SFX Alert'
+      )
+      assert.equal(historyItem.status, 'completed')
+      assert.deepEqual(
+        emitted.find(item => item.event === 'sound-play'),
+        { event: 'sound-play', payload: { src: 'example.mp3', volume: 0.8 } }
+      )
+    })
   })
 })
 

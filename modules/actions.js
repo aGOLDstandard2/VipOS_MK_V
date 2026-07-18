@@ -5,6 +5,7 @@ const { createGreetingService } = require('./greetings')
 
 const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', 'sounds')
 const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.json')
+const DEFAULT_SOUND_TEXT_EXAMPLE_FILE = path.join(__dirname, '..', 'config', 'sfx-text.example.json')
 const DEFAULT_ALERT_SOUND = 'example.mp3'
 const MAX_ACTION_DELAY_MS = 10 * 60 * 1000
 const SOUND_LIST_CACHE_TTL_MS = 5000
@@ -308,16 +309,31 @@ function isSafeContextPath(pathValue) {
 }
 
 function loadSoundTextMap(file, logger = console) {
-  if (!file || !fs.existsSync(file)) return {}
+  const source = resolveSoundTextFile(file)
+  if (!source) return {}
 
   try {
-    return normalizeSoundTextMap(JSON.parse(fs.readFileSync(file, 'utf8')))
+    return normalizeSoundTextMap(JSON.parse(fs.readFileSync(source, 'utf8')))
   } catch (error) {
     if (logger && typeof logger.warn === 'function') {
-      logger.warn(`Failed to load sound text map ${file}: ${error.message}`)
+      logger.warn(`Failed to load sound text map ${source}: ${error.message}`)
     }
     return {}
   }
+}
+
+function resolveSoundTextFile(file) {
+  if (file && fs.existsSync(file)) return file
+  const fallback = getSoundTextExampleFile(file)
+  if (fallback && fs.existsSync(fallback)) return fallback
+  return null
+}
+
+function getSoundTextExampleFile(file) {
+  if (!file) return null
+  if (file === DEFAULT_SOUND_TEXT_FILE) return DEFAULT_SOUND_TEXT_EXAMPLE_FILE
+  if (path.basename(file) !== 'sfx-text.json') return null
+  return path.join(path.dirname(file), 'sfx-text.example.json')
 }
 
 function normalizeSoundTextMap(value) {

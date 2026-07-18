@@ -49,6 +49,23 @@ function withTempSoundDirectory(fn) {
   }
 }
 
+function withTempDirectory(fn) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vipos-actions-'))
+  const cleanup = () => fs.rmSync(directory, { recursive: true, force: true })
+
+  try {
+    const result = fn(directory)
+    if (result && typeof result.then === 'function') {
+      return result.finally(cleanup)
+    }
+    cleanup()
+    return result
+  } catch (error) {
+    cleanup()
+    throw error
+  }
+}
+
 test('delay actions reject non-finite values', async () => {
   const actions = createNoopActionRunner()
 
@@ -184,5 +201,75 @@ test('sound playback warns once for unchanged files above the warning threshold'
 
     assert.equal(warnings.length, 1)
     assert.match(warnings[0], /Sound file alert\.wav is 44 B/)
+  })
+})
+
+test('random sound falls back to example text config when primary config is missing', async () => {
+  await withTempDirectory(async directory => {
+    const soundDirectory = path.join(directory, 'sounds')
+    const configDirectory = path.join(directory, 'config')
+    fs.mkdirSync(soundDirectory)
+    fs.mkdirSync(configDirectory)
+    createTinyWav(path.join(soundDirectory, 'example.wav'))
+    fs.writeFileSync(path.join(configDirectory, 'sfx-text.example.json'), JSON.stringify({
+      'example.wav': 'Example fallback'
+    }))
+
+    const emitted = []
+    const actions = createActionRunner({
+      io: {
+        emit(event, payload) {
+          emitted.push({ event, payload })
+        }
+      },
+      logger: { error() {}, log() {}, warn() {} },
+      obs: {},
+      soundDirectory,
+      soundTextFile: path.join(configDirectory, 'sfx-text.json')
+    })
+    const context = {}
+
+    const results = await actions.run([
+      { type: 'sound.pickRandom', contextKey: 'sfx' },
+      { type: 'sound.play', src: '{sfx.src}' }
+    ], context)
+
+    assert.equal(context.sfx.src, 'example.wav')
+    assert.equal(context.sfx.text, 'Example fallback')
+    assert.equal(results[1].src, 'example.wav')
+    assert.deepEqual(emitted, [
+      { event: 'sound-play', payload: { src: 'example.wav', volume: 1 } }
+    ])
+  })
+})
+
+test('random sound uses primary text config when it exists', async () => {
+  await withTempDirectory(async directory => {
+    const soundDirectory = path.join(directory, 'sounds')
+    const configDirectory = path.join(directory, 'config')
+    fs.mkdirSync(soundDirectory)
+    fs.mkdirSync(configDirectory)
+    createTinyWav(path.join(soundDirectory, 'primary.wav'))
+    createTinyWav(path.join(soundDirectory, 'example.wav'))
+    fs.writeFileSync(path.join(configDirectory, 'sfx-text.json'), JSON.stringify({
+      'primary.wav': 'Primary config'
+    }))
+    fs.writeFileSync(path.join(configDirectory, 'sfx-text.example.json'), JSON.stringify({
+      'example.wav': 'Example fallback'
+    }))
+
+    const actions = createActionRunner({
+      io: { emit() {} },
+      logger: { error() {}, log() {}, warn() {} },
+      obs: {},
+      soundDirectory,
+      soundTextFile: path.join(configDirectory, 'sfx-text.json')
+    })
+    const context = {}
+
+    await actions.run({ type: 'sound.pickRandom', contextKey: 'sfx' }, context)
+
+    assert.equal(context.sfx.src, 'primary.wav')
+    assert.equal(context.sfx.text, 'Primary config')
   })
 })

@@ -181,5 +181,5 @@ Action types currently supported:
 - `log`
 
 `overlay.alert` plays `DEFAULT_ALERT_SOUND` by default unless the action includes `sound: false`, a custom `sound`/`soundSrc`, or the same action list already includes a separate `sound.play` or `sound.pickRandom` action.
-`sound.pickRandom` chooses from top-level `.mp3`, `.ogg`, and `.wav` files in `public/assets/sounds` only when their filenames are listed in `config/sfx-text.json`; subdirectories are ignored. Edit `config/sfx-text.json` to control both the random SFX pool and the overlay text for each filename.
+`sound.pickRandom` chooses from top-level `.mp3`, `.ogg`, and `.wav` files in `public/assets/sounds` only when their filenames are listed in `config/sfx-text.json`; if that file is absent, it falls back to `config/sfx-text.example.json`. Subdirectories are ignored. Edit `config/sfx-text.json` to control both the random SFX pool and the overlay text for each filename.
 Edit `config/greetings.json` to control the themed text pools used by `context.pickRandom`. The control panel can switch the active greeting theme, which is saved in `config/greetings-settings.json`.
