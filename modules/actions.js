@@ -405,7 +405,7 @@ function pickRandomSound({ soundDirectory, textMap = {}, eligibleFilenames = [] 
     .map(entry => entry.name)
 
   if (!filenames.length) {
-    throw userInputError('sound.pickRandom found no configured sound files from sfx-text.json in the local sound directory')
+    throw userInputError('sound.pickRandom found no configured sound files in the local sound directory')
   }
 
   const src = filenames[Math.floor(Math.random() * filenames.length)]

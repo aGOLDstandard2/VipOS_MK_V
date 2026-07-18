@@ -906,9 +906,10 @@ function createApp(services) {
   })
 
   app.use((err, req, res, next) => {
-    console.error(err)
     if (res.headersSent) return next(err)
-    res.status(err.statusCode || 500).json({
+    const statusCode = err.statusCode || 500
+    if (statusCode >= 500) console.error(err)
+    res.status(statusCode).json({
       error: err.message || 'Unexpected server error'
     })
   })

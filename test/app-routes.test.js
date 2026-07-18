@@ -322,14 +322,22 @@ async function waitForQueueHistory(actionQueue, predicate, timeoutMs = 1000) {
 test('/api/v1/sound rejects missing files before enqueueing', async () => {
   const { enqueued, services } = createFakeServices()
   const app = createApp(services)
+  const originalConsoleError = console.error
+  const loggedErrors = []
+  console.error = (...args) => loggedErrors.push(args)
 
-  await withTestServer(app, async baseUrl => {
-    const { payload, response } = await postJson(baseUrl, '/api/v1/sound', { src: 'missing.wav' })
+  try {
+    await withTestServer(app, async baseUrl => {
+      const { payload, response } = await postJson(baseUrl, '/api/v1/sound', { src: 'missing.wav' })
 
-    assert.equal(response.status, 400)
-    assert.match(payload.error, /file was not found/)
-    assert.equal(enqueued.length, 0)
-  })
+      assert.equal(response.status, 400)
+      assert.match(payload.error, /file was not found/)
+      assert.equal(enqueued.length, 0)
+      assert.equal(loggedErrors.length, 0)
+    })
+  } finally {
+    console.error = originalConsoleError
+  }
 })
 
 test('/api/v1/sound enqueues existing sound files', async () => {

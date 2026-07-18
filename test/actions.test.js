@@ -340,6 +340,34 @@ test('random sound can use inline text map as the eligible sound pool', async ()
   })
 })
 
+test('random sound empty pool error is not tied to sfx-text.json', async () => {
+  await withTempDirectory(async directory => {
+    const soundDirectory = path.join(directory, 'sounds')
+    fs.mkdirSync(soundDirectory)
+
+    const actions = createActionRunner({
+      io: { emit() {} },
+      logger: { error() {}, log() {}, warn() {} },
+      obs: {},
+      soundDirectory,
+      soundTextFile: path.join(directory, 'missing-sfx-text.json')
+    })
+
+    await assert.rejects(
+      () => actions.run({
+        type: 'sound.pickRandom',
+        contextKey: 'sfx',
+        textMap: {
+          'missing.wav': 'Inline map'
+        }
+      }, {}),
+      error => error.statusCode === 400 &&
+        /no configured sound files in the local sound directory/.test(error.message) &&
+        !/sfx-text\.json/.test(error.message)
+    )
+  })
+})
+
 test('random sound inline text map overrides configured labels without excluding configured files', async () => {
   await withTempDirectory(async directory => {
     const soundDirectory = path.join(directory, 'sounds')
