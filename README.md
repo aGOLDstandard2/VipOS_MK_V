@@ -6,6 +6,19 @@
 - Run `npm start` for production
 - Run `npm run dev` for development
 
+## Styles and fonts
+
+SCSS under `public/assets/sass` is the maintained source. Regenerate the committed, compressed CSS and source maps with:
+
+```bash
+npm run build:css
+```
+
+Use `npm run watch:css` while editing `styles.scss` or `control.scss`. Review and commit the generated files in
+`public/assets/css` with the SCSS change.
+
+Font binaries remain intentionally untracked. Obtain the Orbitron webfonts from [theleagueof/orbitron](https://github.com/theleagueof/orbitron), which distributes them under the [SIL Open Font License](https://github.com/theleagueof/orbitron/blob/master/Open%20Font%20License.markdown), and place them in `public/assets/fonts` with the filenames referenced by `public/assets/sass/imports/fonts.scss`. `SNNeoNoire-Regular.ttf` is not redistributable; obtain and place it at `public/assets/fonts/SNNeoNoire-Regular.ttf` on each development or deployment machine.
+
 ## Local URLs
 - Control panel: `http://localhost:5000/control`
 - Alerts overlay, including sound alerts: `http://localhost:5000/overlay/alerts`
