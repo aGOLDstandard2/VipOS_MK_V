@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { normalizeRegex, testRegex } = require('../modules/chat-regex')
+const { normalizeRegex, testRegex } = require('../modules/chat/chat-regex')
 
 test('handler regexes keep normal match behavior', () => {
   const pattern = normalizeRegex('hello')

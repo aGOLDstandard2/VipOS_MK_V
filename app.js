@@ -12,7 +12,7 @@ const path = require('path')
 
 const { assertSoundFileExists, createActionRunner, listSoundFiles, validateSoundSrc } = require('./modules/actions')
 const { createActionQueue } = require('./modules/action-queue')
-const { createChatService } = require('./modules/chat')
+const { createChatService } = require('./modules/chat/chat')
 const { createGreetingService } = require('./modules/greetings')
 const { createMacroService } = require('./modules/macros')
 const { createObsService } = require('./modules/obs')

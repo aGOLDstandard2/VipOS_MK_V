@@ -1,13 +1,37 @@
 const fs = require('fs')
 const path = require('path')
-const { normalizeRegex, testRegex } = require('./chat-regex')
+const { testRegex } = require('./chat-regex')
+const {
+  createAutomaticRedemptionContext,
+  createChatEntryContext,
+  createFollowContext,
+  createMessageContext,
+  createRaidContext,
+  createRedemptionContext,
+  createRewardEventContext,
+  createSubscriptionContext,
+  createSubscriptionGiftContext,
+  getPrivilegedEntryRoles,
+  normalizeRole,
+  summarizeChatEntryContext,
+  summarizeCommunityEventContext,
+  summarizeRedemptionContext,
+  summarizeRewardEventContext
+} = require('./chat-context')
+const {
+  normalizeActionHandler,
+  normalizeAutomationConfig,
+  normalizeCommand,
+  normalizeEventName,
+  normalizeMatchValue
+} = require('./chat-normalization')
 
 const CHAT_INTENT = 'chat'
 const BROADCASTER_INTENT = 'broadcaster'
 const DEFAULT_COMMAND_PREFIX = '!'
-const DEFAULT_TOKEN_FILE = path.join(__dirname, '..', 'config', 'twitch-token.json')
-const DEFAULT_BROADCASTER_TOKEN_FILE = path.join(__dirname, '..', 'config', 'twitch-broadcaster-token.json')
-const DEFAULT_COMMANDS_FILE = path.join(__dirname, '..', 'config', 'commands.json')
+const DEFAULT_TOKEN_FILE = path.join(__dirname, '..', '..', 'config', 'twitch-token.json')
+const DEFAULT_BROADCASTER_TOKEN_FILE = path.join(__dirname, '..', '..', 'config', 'twitch-broadcaster-token.json')
+const DEFAULT_COMMANDS_FILE = path.join(__dirname, '..', '..', 'config', 'commands.json')
 const DEFAULT_RECONNECT_INITIAL_MS = 5000
 const DEFAULT_RECONNECT_MAX_MS = 60000
 const CHAT_SCOPES = ['user:read:chat', 'user:write:chat']
@@ -1064,342 +1088,6 @@ async function resolveBroadcaster(api, config) {
   return user
 }
 
-function createMessageContext(event, state) {
-  const badges = event.badges || {}
-  const roles = getRoles({
-    badges,
-    broadcasterId: state.broadcasterId,
-    chatterId: event.chatterId
-  })
-
-  return {
-    after: '',
-    args: [],
-    badges,
-    broadcaster: event.broadcasterName,
-    broadcasterDisplayName: event.broadcasterDisplayName,
-    broadcasterId: event.broadcasterId,
-    chat: {
-      badges,
-      broadcaster: {
-        displayName: event.broadcasterDisplayName,
-        id: event.broadcasterId,
-        name: event.broadcasterName
-      },
-      chatter: {
-        color: event.color,
-        displayName: event.chatterDisplayName,
-        id: event.chatterId,
-        name: event.chatterName
-      },
-      isCheer: event.isCheer,
-      isRedemption: event.isRedemption,
-      messageId: event.messageId,
-      messageType: event.messageType,
-      rewardId: event.rewardId,
-      roles,
-      text: event.messageText
-    },
-    command: '',
-    commandName: '',
-    displayName: event.chatterDisplayName,
-    message: event.messageText,
-    messageId: event.messageId,
-    roles,
-    source: 'chat',
-    user: event.chatterName,
-    userId: event.chatterId,
-    username: event.chatterName
-  }
-}
-
-function createChatEntryContext(context) {
-  const entryRoles = getPrivilegedEntryRoles(context.roles)
-  const role = entryRoles[0] || ''
-
-  return {
-    ...context,
-    chat: {
-      ...context.chat,
-      entryRoles,
-      role
-    },
-    entry: {
-      firstSeenAt: new Date().toISOString(),
-      roles: entryRoles,
-      role
-    },
-    event: 'chat.entry',
-    message: `${context.displayName} entered chat`,
-    source: 'chat-entry'
-  }
-}
-
-function createRedemptionContext(eventName, event) {
-  const input = event.input || ''
-  const redeemedAt = dateToIso(event.redemptionDate)
-
-  return {
-    broadcaster: event.broadcasterName,
-    broadcasterDisplayName: event.broadcasterDisplayName,
-    broadcasterId: event.broadcasterId,
-    displayName: event.userDisplayName,
-    event: eventName,
-    input,
-    message: input,
-    redemption: {
-      id: event.id,
-      input,
-      redeemedAt,
-      rewardId: event.rewardId,
-      status: event.status
-    },
-    reward: {
-      cost: event.rewardCost,
-      id: event.rewardId,
-      prompt: event.rewardPrompt,
-      title: event.rewardTitle
-    },
-    source: 'redemption',
-    user: event.userName,
-    userId: event.userId,
-    username: event.userName
-  }
-}
-
-function createAutomaticRedemptionContext(event) {
-  const reward = event.reward
-  const message = event.messageText || ''
-  const redeemedAt = dateToIso(event.redemptionDate)
-
-  return {
-    automaticReward: {
-      channelPoints: reward.channelPoints,
-      emote: reward.emote,
-      type: reward.type
-    },
-    broadcaster: event.broadcasterName,
-    broadcasterDisplayName: event.broadcasterDisplayName,
-    broadcasterId: event.broadcasterId,
-    displayName: event.userDisplayName,
-    event: 'automatic-redemption.add',
-    input: message,
-    message,
-    redemption: {
-      id: event.id,
-      input: message,
-      redeemedAt,
-      rewardType: reward.type,
-      status: 'fulfilled'
-    },
-    reward: {
-      cost: reward.channelPoints,
-      id: reward.type,
-      prompt: '',
-      title: reward.type,
-      type: reward.type
-    },
-    source: 'automatic-redemption',
-    user: event.userName,
-    userId: event.userId,
-    username: event.userName
-  }
-}
-
-function createRewardEventContext(eventName, event) {
-  return {
-    broadcaster: event.broadcasterName,
-    broadcasterDisplayName: event.broadcasterDisplayName,
-    broadcasterId: event.broadcasterId,
-    displayName: event.broadcasterDisplayName,
-    event: eventName,
-    message: event.title,
-    reward: {
-      autoApproved: event.autoApproved,
-      backgroundColor: event.backgroundColor,
-      cost: event.cost,
-      globalCooldown: event.globalCooldown,
-      id: event.id,
-      isEnabled: event.isEnabled,
-      isInStock: event.isInStock,
-      isPaused: event.isPaused,
-      maxRedemptionsPerStream: event.maxRedemptionsPerStream,
-      maxRedemptionsPerUserPerStream: event.maxRedemptionsPerUserPerStream,
-      prompt: event.prompt,
-      redemptionsThisStream: event.redemptionsThisStream,
-      title: event.title,
-      userInputRequired: event.userInputRequired
-    },
-    source: 'reward',
-    user: event.broadcasterName,
-    userId: event.broadcasterId,
-    username: event.broadcasterName
-  }
-}
-
-function createFollowContext(event) {
-  const followedAt = dateToIso(event.followDate)
-
-  return {
-    broadcaster: event.broadcasterName,
-    broadcasterDisplayName: event.broadcasterDisplayName,
-    broadcasterId: event.broadcasterId,
-    displayName: event.userDisplayName,
-    event: 'follow.add',
-    follow: {
-      followedAt,
-      userDisplayName: event.userDisplayName,
-      userId: event.userId,
-      username: event.userName
-    },
-    message: `${event.userDisplayName} followed`,
-    source: 'follow',
-    user: event.userName,
-    userId: event.userId,
-    username: event.userName
-  }
-}
-
-function createRaidContext(event) {
-  return {
-    broadcaster: event.raidedBroadcasterName,
-    broadcasterDisplayName: event.raidedBroadcasterDisplayName,
-    broadcasterId: event.raidedBroadcasterId,
-    displayName: event.raidingBroadcasterDisplayName,
-    event: 'raid.add',
-    message: `${event.raidingBroadcasterDisplayName} raided with ${event.viewers} viewers`,
-    raid: {
-      fromBroadcasterDisplayName: event.raidingBroadcasterDisplayName,
-      fromBroadcasterId: event.raidingBroadcasterId,
-      fromBroadcasterName: event.raidingBroadcasterName,
-      toBroadcasterDisplayName: event.raidedBroadcasterDisplayName,
-      toBroadcasterId: event.raidedBroadcasterId,
-      toBroadcasterName: event.raidedBroadcasterName,
-      viewers: event.viewers
-    },
-    source: 'raid',
-    user: event.raidingBroadcasterName,
-    userId: event.raidingBroadcasterId,
-    username: event.raidingBroadcasterName,
-    viewers: event.viewers
-  }
-}
-
-function createSubscriptionContext(event) {
-  return {
-    broadcaster: event.broadcasterName,
-    broadcasterDisplayName: event.broadcasterDisplayName,
-    broadcasterId: event.broadcasterId,
-    displayName: event.userDisplayName,
-    event: 'subscription.add',
-    isGift: Boolean(event.isGift),
-    message: `${event.userDisplayName} subscribed`,
-    source: 'subscription',
-    subscription: {
-      isGift: Boolean(event.isGift),
-      tier: event.tier,
-      userDisplayName: event.userDisplayName,
-      userId: event.userId,
-      username: event.userName
-    },
-    tier: event.tier,
-    user: event.userName,
-    userId: event.userId,
-    username: event.userName
-  }
-}
-
-function createSubscriptionGiftContext(event) {
-  const displayName = event.isAnonymous ? 'Anonymous' : event.gifterDisplayName
-  const username = event.isAnonymous ? 'anonymous' : event.gifterName
-  const userId = event.isAnonymous ? null : event.gifterId
-
-  return {
-    broadcaster: event.broadcasterName,
-    broadcasterDisplayName: event.broadcasterDisplayName,
-    broadcasterId: event.broadcasterId,
-    displayName,
-    event: 'subscription.gift',
-    isAnonymous: Boolean(event.isAnonymous),
-    isGift: true,
-    message: `${displayName} gifted ${event.amount} subscription${Number(event.amount) === 1 ? '' : 's'}`,
-    source: 'subscription',
-    subscription: {
-      amount: event.amount,
-      cumulativeAmount: event.cumulativeAmount,
-      gifterDisplayName: event.gifterDisplayName,
-      gifterId: event.gifterId,
-      gifterName: event.gifterName,
-      isAnonymous: Boolean(event.isAnonymous),
-      isGift: true,
-      tier: event.tier
-    },
-    tier: event.tier,
-    user: username,
-    userId,
-    username
-  }
-}
-
-function summarizeRedemptionContext(context) {
-  return {
-    automaticReward: context.automaticReward || null,
-    displayName: context.displayName,
-    event: context.event,
-    input: context.input || '',
-    redeemedAt: context.redemption && context.redemption.redeemedAt,
-    redemptionId: context.redemption && context.redemption.id,
-    reward: context.reward,
-    status: context.redemption && context.redemption.status,
-    user: context.user,
-    userId: context.userId
-  }
-}
-
-function summarizeRewardEventContext(context) {
-  return {
-    event: context.event,
-    reward: context.reward
-  }
-}
-
-function summarizeCommunityEventContext(context) {
-  return {
-    displayName: context.displayName,
-    event: context.event,
-    follow: context.follow || null,
-    raid: context.raid || null,
-    subscription: context.subscription || null,
-    user: context.user,
-    userId: context.userId
-  }
-}
-
-function summarizeChatEntryContext(context) {
-  return {
-    displayName: context.displayName,
-    event: context.event,
-    roles: context.entry.roles,
-    user: context.user,
-    userId: context.userId
-  }
-}
-
-function getRoles({ badges, broadcasterId, chatterId }) {
-  const roles = new Set(['everyone'])
-
-  if (chatterId === broadcasterId || badges.broadcaster) roles.add('broadcaster')
-  if (badges.moderator) roles.add('moderator')
-  if (badges.vip) roles.add('vip')
-  if (badges.subscriber) roles.add('subscriber')
-  if (badges.founder) {
-    roles.add('founder')
-    roles.add('subscriber')
-  }
-
-  return [...roles]
-}
-
 function getPrivilegedChatEntryKey(context, handlers, seenEntrants) {
   if (!handlers.length) return null
   const entryRoles = getPrivilegedEntryRoles(context.roles)
@@ -1409,11 +1097,6 @@ function getPrivilegedChatEntryKey(context, handlers, seenEntrants) {
   if (!userKey || seenEntrants.has(userKey)) return null
 
   return userKey
-}
-
-function getPrivilegedEntryRoles(roles) {
-  const actual = new Set((roles || []).map(normalizeRole))
-  return ['moderator', 'vip'].filter(role => actual.has(role))
 }
 
 function isAllowedRole(allowedRoles, actualRoles) {
@@ -1478,202 +1161,6 @@ function warnMissingAnyScope(actualScopes, acceptedScopes, logger, label) {
   if (!acceptedScopes.some(scope => actual.has(scope))) {
     logger.warn(`${label} token is missing one of these scopes: ${acceptedScopes.join(', ')}`)
   }
-}
-
-function normalizeAutomationConfig(parsed) {
-  if (Array.isArray(parsed)) {
-    return {
-      automaticRedemptions: [],
-      chatEntries: [],
-      commands: parsed,
-    follows: [],
-    raids: [],
-    redemptions: [],
-    redemptionUpdates: [],
-    rewardEvents: [],
-    subscriptions: []
-    }
-  }
-
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('commands.json must contain an array or an object')
-  }
-
-  return {
-    automaticRedemptions: asArray(parsed.automaticRedemptions || parsed.automaticRewards),
-    chatEntries: asArray(parsed.chatEntries || parsed.chatEntrants || parsed.entries || parsed.entryAlerts),
-    commands: asArray(parsed.commands),
-    follows: asArray(parsed.follows || parsed.followers || parsed.followEvents),
-    raids: asArray(parsed.raids || parsed.raidEvents),
-    redemptions: asArray(parsed.redemptions || parsed.rewardRedemptions),
-    redemptionUpdates: asArray(parsed.redemptionUpdates),
-    rewardEvents: asArray(parsed.rewardEvents),
-    subscriptions: asArray(parsed.subscriptions || parsed.subs || parsed.subscriptionEvents)
-  }
-}
-
-function normalizeCommand(command, commandPrefix) {
-  if (!command || typeof command !== 'object' || command.enabled === false) return null
-
-  const names = [
-    command.command,
-    ...(Array.isArray(command.commands) ? command.commands : []),
-    ...(Array.isArray(command.aliases) ? command.aliases : [])
-  ].filter(Boolean).map(name => normalizeCommandName(name, commandPrefix)).filter(Boolean)
-
-  if (!names.length || !command.actions) return null
-
-  return {
-    actions: command.actions,
-    cooldownScope: command.cooldownScope === 'user' ? 'user' : 'global',
-    cooldownSeconds: Number(command.cooldownSeconds || 0),
-    key: names[0],
-    names,
-    roles: normalizeRoles(command.roles)
-  }
-}
-
-function normalizeActionHandler(handler, defaultEvent) {
-  if (!handler || typeof handler !== 'object' || handler.enabled === false) return null
-  if (!handler.actions) return null
-
-  const match = handler.match && typeof handler.match === 'object' ? handler.match : {}
-  const events = normalizeEventList(match.event || match.events || handler.event || handler.events || defaultEvent)
-  const rewardIds = normalizeMatchList(match.rewardId || match.rewardIds || handler.rewardId || handler.rewardIds || handler.id)
-  const rewardTitles = normalizeMatchList(match.rewardTitle || match.rewardTitles || match.title || match.titles || handler.rewardTitle || handler.rewardTitles || handler.title)
-  const rewardTypes = normalizeMatchList(match.rewardType || match.rewardTypes || match.type || match.types || handler.rewardType || handler.rewardTypes || handler.type)
-  const statuses = normalizeMatchList(match.status || match.statuses || handler.status || handler.statuses)
-  const userIds = normalizeMatchList(match.userId || match.userIds || handler.userId || handler.userIds)
-  const usernames = normalizeMatchList(match.username || match.usernames || match.userName || match.userNames || match.displayName || match.displayNames || handler.username || handler.usernames || handler.userName || handler.userNames || handler.displayName || handler.displayNames)
-  const inputContains = normalizeMatchList(match.inputContains || match.messageContains || handler.inputContains || handler.messageContains)
-  const inputPatterns = normalizeRegexList(match.inputMatches || match.messageMatches || match.inputPattern || handler.inputMatches || handler.messageMatches || handler.inputPattern)
-  const minViewers = numberOrNull(match.minViewers || match.minimumViewers || handler.minViewers || handler.minimumViewers)
-  const maxViewers = numberOrNull(match.maxViewers || match.maximumViewers || handler.maxViewers || handler.maximumViewers)
-  const roles = normalizeRoles(match.role || match.roles || handler.role || handler.roles)
-  const name = normalizeMatchValue(match.name || handler.name)
-  const keyParts = [
-    events.join(',') || defaultEvent || 'reward',
-    name,
-    rewardIds.join(','),
-    rewardTitles.join(','),
-    rewardTypes.join(','),
-    statuses.join(','),
-    userIds.join(','),
-    usernames.join(','),
-    roles.join(','),
-    inputContains.join(','),
-    inputPatterns.map(pattern => pattern.source).join(','),
-    minViewers === null ? '' : `min${minViewers}`,
-    maxViewers === null ? '' : `max${maxViewers}`
-  ].filter(Boolean)
-
-  return {
-    actions: handler.actions,
-    cooldownScope: handler.cooldownScope === 'user' ? 'user' : 'global',
-    cooldownSeconds: Number(handler.cooldownSeconds || 0),
-    events,
-    key: keyParts.join(':'),
-    inputContains,
-    inputPatterns,
-    maxViewers,
-    minViewers,
-    name,
-    rewardIds,
-    rewardTitles,
-    rewardTypes,
-    roles,
-    statuses,
-    userIds,
-    usernames
-  }
-}
-
-function normalizeCommandName(name, commandPrefix) {
-  const normalized = String(name || '').trim().toLowerCase()
-  if (!normalized) return null
-  if (normalized.startsWith(commandPrefix)) return normalized
-  return `${commandPrefix}${normalized}`
-}
-
-function normalizeRoles(roles) {
-  return asArray(roles).map(normalizeRole).filter(Boolean)
-}
-
-function normalizeMatchList(value) {
-  return asArray(value).map(normalizeMatchValue).filter(Boolean)
-}
-
-function normalizeMatchValue(value) {
-  return String(value || '').trim().toLowerCase()
-}
-
-function normalizeRegexList(value) {
-  return asArray(value).map(normalizeRegex).filter(Boolean)
-}
-
-function normalizeEventList(value) {
-  return asArray(value).map(normalizeEventName).filter(Boolean)
-}
-
-function normalizeEventName(value) {
-  const normalized = normalizeMatchValue(value).replace(/_/g, '.')
-  const aliases = {
-    add: 'reward.add',
-    automatic: 'automatic-redemption.add',
-    automaticRedemption: 'automatic-redemption.add',
-    automaticredemption: 'automatic-redemption.add',
-    chatEntry: 'chat.entry',
-    chatentry: 'chat.entry',
-    enter: 'chat.entry',
-    entry: 'chat.entry',
-    follow: 'follow.add',
-    followed: 'follow.add',
-    follower: 'follow.add',
-    gift: 'subscription.gift',
-    giftsub: 'subscription.gift',
-    'gift-sub': 'subscription.gift',
-    gifted: 'subscription.gift',
-    giftedsub: 'subscription.gift',
-    'gifted-sub': 'subscription.gift',
-    raid: 'raid.add',
-    raided: 'raid.add',
-    redemption: 'redemption.add',
-    redeemed: 'redemption.add',
-    remove: 'reward.remove',
-    sub: 'subscription.add',
-    subs: 'subscription.add',
-    subscribe: 'subscription.add',
-    subscribed: 'subscription.add',
-    subscriber: 'subscription.add',
-    subscribers: 'subscription.add',
-    subscription: 'subscription.add',
-    subscriptiongift: 'subscription.gift',
-    'subscription-gift': 'subscription.gift',
-    subscriptions: 'subscription.add',
-    update: 'reward.update'
-  }
-
-  return aliases[normalized] || normalized
-}
-
-function normalizeRole(role) {
-  const normalized = String(role || '').trim().toLowerCase()
-  const aliases = {
-    '*': 'everyone',
-    all: 'everyone',
-    mod: 'moderator',
-    mods: 'moderator',
-    sub: 'subscriber',
-    subs: 'subscriber',
-    vips: 'vip'
-  }
-
-  return aliases[normalized] || normalized
-}
-
-function asArray(value) {
-  if (value === undefined || value === null || value === '') return []
-  return Array.isArray(value) ? value : [value]
 }
 
 function getConfiguredEventSubHandlerGroups({
@@ -1828,11 +1315,11 @@ function persistToken(tokenFile, userId, token, logger) {
 
 function resolveAppPath(value, fallback) {
   if (!value) return fallback
-  return path.isAbsolute(value) ? value : path.join(__dirname, '..', value)
+  return path.isAbsolute(value) ? value : path.join(__dirname, '..', '..', value)
 }
 
 function relativePath(filePath) {
-  return path.relative(path.join(__dirname, '..'), filePath).replace(/\\/g, '/')
+  return path.relative(path.join(__dirname, '..', '..'), filePath).replace(/\\/g, '/')
 }
 
 function normalizeLogin(value) {
@@ -1859,21 +1346,9 @@ function numberOrUndefined(value) {
   return Number.isFinite(number) ? number : undefined
 }
 
-function numberOrNull(value) {
-  if (value === undefined || value === null || value === '') return null
-  const number = Number(value)
-  return Number.isFinite(number) ? number : null
-}
-
 function numberOrDefault(value, defaultValue) {
   const number = Number(value)
   return Number.isFinite(number) && number > 0 ? number : defaultValue
-}
-
-function dateToIso(value) {
-  if (!value) return null
-  const date = value instanceof Date ? value : new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
 async function loadTwurple() {

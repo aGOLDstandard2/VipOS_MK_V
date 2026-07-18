@@ -1,3 +1,4 @@
+// Handler regular-expression validation and bounded matching.
 const MAX_HANDLER_REGEX_INPUT_LENGTH = 500
 const MAX_HANDLER_REGEX_PATTERN_LENGTH = 200
 

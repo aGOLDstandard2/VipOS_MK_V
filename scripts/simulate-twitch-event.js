@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const { createActionQueue } = require('../modules/action-queue')
 const { createActionRunner } = require('../modules/actions')
-const { createChatService } = require('../modules/chat')
+const { createChatService } = require('../modules/chat/chat')
 const { createGreetingService } = require('../modules/greetings')
 
 const EVENT_ALIASES = {

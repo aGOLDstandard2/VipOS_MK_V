@@ -13,7 +13,7 @@ const {
   isNonRetryableStartupError,
   readTokenConfig,
   TokenConfigError
-} = require('../modules/chat')
+} = require('../modules/chat/chat')
 
 function withTempDirectory(fn) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vipos-chat-'))
