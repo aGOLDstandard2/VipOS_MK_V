@@ -161,6 +161,7 @@ Redemption handlers can be catch-all, or they can include a `match` object:
 ```
 
 Supported `match` fields include `event`, `rewardId`, `rewardTitle`, `rewardType`, `status`, `userId`, `username`, `displayName`, `roles`, `inputContains`, and `inputMatches`.
+`inputMatches` values are JavaScript regular expressions and are intentionally limited: patterns must be 200 characters or fewer, nested quantifiers are rejected, and matching only evaluates the first 500 characters of viewer input.
 Raid handlers also support `minViewers` and `maxViewers`.
 
 Use `status` only when you intentionally want to separate queued/manual reward states like `unfulfilled`, `fulfilled`, or `canceled`.
