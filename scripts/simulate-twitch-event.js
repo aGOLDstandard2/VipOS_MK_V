@@ -156,10 +156,14 @@ async function simulateLiveEvent(eventType, event, fixtureFile, baseUrl) {
     body: JSON.stringify(event)
   })
   const text = await response.text()
-  const payload = text ? JSON.parse(text) : {}
+  const payload = parseResponseText(text)
 
   if (!response.ok) {
-    throw new Error(payload.error || `${response.status} ${response.statusText}`)
+    throw new Error(formatHttpError(response, payload || {}, text))
+  }
+
+  if (!payload) {
+    throw new Error(`Expected a JSON object response from ${url}`)
   }
 
   console.log(`Sent live Twitch ${eventType} simulation to ${url}`)
@@ -254,7 +258,39 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-main().catch(error => {
-  console.error(`[error] ${error.message}`)
-  process.exitCode = 1
-})
+function parseResponseText(text) {
+  if (!text) return null
+
+  try {
+    const payload = JSON.parse(text)
+    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null
+  } catch (error) {
+    return null
+  }
+}
+
+function formatHttpError(response, payload, text) {
+  const detail = payload.error || summarizeResponseText(text)
+  const status = `${response.status} ${response.statusText}`
+  return detail ? `${status}: ${detail}` : status
+}
+
+function summarizeResponseText(text, maxLength = 200) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized
+}
+
+if (require.main === module) {
+  main().catch(error => {
+    console.error(`[error] ${error.message}`)
+    process.exitCode = 1
+  })
+}
+
+module.exports = {
+  formatHttpError,
+  parseResponseText,
+  simulateLiveEvent,
+  summarizeResponseText
+}
