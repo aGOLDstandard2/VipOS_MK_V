@@ -721,23 +721,23 @@ function createApp(services, { port = PORT, portContext = createPortContext(port
   })
 
   app.post('/api/v1/raffle/on', (req, res) => {
-    res.json({ ok: true, raffle: raffle.enable() })
+    res.json({ ok: true, raffle: raffle.enable({ requirePersistence: true }) })
   })
 
   app.post('/api/v1/raffle/off', (req, res) => {
-    res.json({ ok: true, raffle: raffle.disable() })
+    res.json({ ok: true, raffle: raffle.disable({ requirePersistence: true }) })
   })
 
   app.post('/api/v1/raffle/toggle', (req, res) => {
-    res.json({ ok: true, raffle: raffle.toggle() })
+    res.json({ ok: true, raffle: raffle.toggle({ requirePersistence: true }) })
   })
 
   app.post('/api/v1/raffle/start', (req, res) => {
-    res.json({ ok: true, raffle: raffle.start(), queue: actionQueue.getStatus() })
+    res.json({ ok: true, raffle: raffle.start({ requirePersistence: true }), queue: actionQueue.getStatus() })
   })
 
   app.post('/api/v1/raffle/close', (req, res) => {
-    res.json({ ok: true, raffle: raffle.close(), queue: actionQueue.getStatus() })
+    res.json({ ok: true, raffle: raffle.close({ requirePersistence: true }), queue: actionQueue.getStatus() })
   })
 
   app.get('/api/v1/sounds', (req, res) => {

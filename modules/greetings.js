@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { createPersistenceError, writeJsonFile } = require('./json-file')
 
 const DEFAULT_GREETINGS_FILE = path.join(__dirname, '..', 'config', 'greetings.json')
 const DEFAULT_GREETINGS_EXAMPLE_FILE = path.join(__dirname, '..', 'config', 'greetings.example.json')
@@ -51,10 +52,9 @@ function createGreetingService({
     const activePool = resolvePool(catalog, poolName, { strict: true })
 
     try {
-      fs.mkdirSync(path.dirname(settingsFile), { recursive: true })
-      fs.writeFileSync(settingsFile, `${JSON.stringify({ activePool }, null, 2)}\n`)
+      writeJsonFile(settingsFile, { activePool })
     } catch (error) {
-      throw new Error(`Failed to save greeting settings: ${error.message}`)
+      throw createPersistenceError('Failed to save greeting settings', error)
     }
 
     return getStatus()

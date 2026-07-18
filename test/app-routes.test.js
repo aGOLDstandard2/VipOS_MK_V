@@ -478,6 +478,38 @@ test('queue status and control routes delegate to the action queue', async () =>
   assert.deepEqual(queueControlCalls, ['pause', 'resume', 'skip', 'clear'])
 })
 
+test('greeting and raffle API mutations report persistence failures', async () => {
+  const { services } = createFakeServices()
+  const persistenceError = Object.assign(new Error('Failed to persist local state'), { statusCode: 503 })
+  const raffleOptions = []
+  services.greetings.setActivePool = () => {
+    throw persistenceError
+  }
+  services.raffle.start = options => {
+    raffleOptions.push(options)
+    throw persistenceError
+  }
+  const app = createApp(services)
+  const originalConsoleError = console.error
+  console.error = () => {}
+
+  try {
+    await withTestServer(app, async baseUrl => {
+      const greeting = await postJson(baseUrl, '/api/v1/greetings/pool', { pool: 'default' })
+      const raffle = await postJson(baseUrl, '/api/v1/raffle/start', {})
+
+      assert.equal(greeting.response.status, 503)
+      assert.equal(raffle.response.status, 503)
+      assert.equal(greeting.payload.error, 'Failed to persist local state')
+      assert.equal(raffle.payload.error, 'Failed to persist local state')
+    })
+  } finally {
+    console.error = originalConsoleError
+  }
+
+  assert.deepEqual(raffleOptions, [{ requirePersistence: true }])
+})
+
 test('configured application port controls status and local-origin checks', async () => {
   const configuredPort = 54321
   const { enqueued, services } = createFakeServices()

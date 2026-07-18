@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { createPersistenceError, writeJsonFile } = require('./json-file')
 
 const DEFAULT_STATE_FILE = path.join(__dirname, '..', 'config', 'raffle.json')
 const DEFAULT_MIN_DELAY_MS = 5 * 60 * 1000
@@ -25,44 +26,49 @@ function createRaffleService({
   let countdownTimer = null
   const state = loadState(stateFile, settings, logger)
 
-  function enable() {
+  function enable({ requirePersistence = false } = {}) {
     if (state.enabled) return getStatus()
 
+    const rollbackState = requirePersistence ? cloneState(state) : null
     state.enabled = true
     state.updatedAt = nowIso()
-    save()
-    return start()
+
+    if (state.current && state.current.status === 'open') {
+      save({ requirePersistence, rollbackState })
+      return getStatus()
+    }
+
+    return start({ requirePersistence, rollbackState })
   }
 
-  function disable() {
+  function disable({ requirePersistence = false } = {}) {
     const wasEnabled = state.enabled
     const hadOpenRaffle = Boolean(state.current && state.current.status === 'open')
+    const rollbackState = requirePersistence ? cloneState(state) : null
 
     state.enabled = false
     state.updatedAt = nowIso()
-    clearEventTimer()
-    clearCloseTimer()
-    clearCountdownTimer()
     if (hadOpenRaffle) {
       state.current.status = 'canceled'
       state.current.closedAt = nowIso()
     }
     state.nextEventAt = null
-    save()
+    save({ requirePersistence, rollbackState })
+    clearEventTimer()
+    clearCloseTimer()
+    clearCountdownTimer()
     if (wasEnabled || hadOpenRaffle) announceRaffleDisabled(hadOpenRaffle)
     return getStatus()
   }
 
-  function toggle() {
-    return state.enabled ? disable() : enable()
+  function toggle(options = {}) {
+    return state.enabled ? disable(options) : enable(options)
   }
 
-  function start() {
+  function start({ requirePersistence = false, rollbackState = null } = {}) {
     if (state.current && state.current.status === 'open') return getStatus()
 
-    clearEventTimer()
-    clearCloseTimer()
-
+    const rollback = rollbackState || (requirePersistence ? cloneState(state) : null)
     const openedAt = nowIso()
     const closesAt = new Date(Date.now() + state.settings.entryWindowMs).toISOString()
     const roundNumber = Number(state.totals.roundsStarted || 0) + 1
@@ -82,19 +88,20 @@ function createRaffleService({
     state.nextEventAt = null
     state.totals.roundsStarted = roundNumber
     state.updatedAt = openedAt
-    save()
+    save({ requirePersistence, rollbackState: rollback })
 
+    clearEventTimer()
+    clearCloseTimer()
     scheduleClose()
     scheduleCountdown()
     announceRaffleOpen().catch(handleAnnounceError)
     return getStatus()
   }
 
-  function close() {
+  function close({ requirePersistence = false } = {}) {
     if (!state.current || state.current.status !== 'open') return getStatus()
 
-    clearCloseTimer()
-    clearCountdownTimer()
+    const rollbackState = requirePersistence ? cloneState(state) : null
 
     const closedAt = nowIso()
     const entrants = Object.values(state.current.entrants || {})
@@ -136,10 +143,11 @@ function createRaffleService({
 
     state.history.unshift(historyItem)
     state.history = state.history.slice(0, state.settings.maxHistory)
-    save()
+    scheduleNextEvent({ requirePersistence, rollbackState })
 
+    clearCloseTimer()
+    clearCountdownTimer()
     announceRaffleClosed(historyItem).catch(handleAnnounceError)
-    scheduleNextEvent()
     return getStatus()
   }
 
@@ -193,16 +201,16 @@ function createRaffleService({
     return getStatus()
   }
 
-  function scheduleNextEvent() {
-    clearEventTimer()
-
+  function scheduleNextEvent({ requirePersistence = false, rollbackState = null } = {}) {
     if (!state.enabled) {
       state.nextEventAt = null
-      save()
+      save({ requirePersistence, rollbackState })
+      clearEventTimer()
       return
     }
 
     if (state.current && state.current.status === 'open') {
+      clearEventTimer()
       scheduleClose()
       scheduleCountdown()
       return
@@ -210,8 +218,9 @@ function createRaffleService({
 
     const delay = randomDelay(state.settings.minDelayMs, state.settings.maxDelayMs)
     state.nextEventAt = new Date(Date.now() + delay).toISOString()
-    save()
+    save({ requirePersistence, rollbackState })
 
+    clearEventTimer()
     eventTimer = setTimeout(() => {
       eventTimer = null
       start()
@@ -286,6 +295,7 @@ function createRaffleService({
       pointName: state.settings.pointName,
       pointTwitchEmoji: state.settings.pointTwitchEmoji,
       lastError: state.lastError || null,
+      lastPersistenceError: state.lastPersistenceError || null,
       nextEventAt: state.nextEventAt,
       totals: { ...state.totals },
       updatedAt: state.updatedAt,
@@ -317,8 +327,15 @@ function createRaffleService({
     return user
   }
 
-  function save() {
-    persistState(stateFile, state, logger)
+  function save({ requirePersistence = false, rollbackState = null } = {}) {
+    state.lastPersistenceError = null
+    const error = persistState(stateFile, state, logger)
+    if (!error) return true
+
+    if (rollbackState) restoreState(state, rollbackState)
+    state.lastPersistenceError = error.message
+    if (requirePersistence) throw createPersistenceError('Failed to persist raffle state', error)
+    return false
   }
 
   async function announceRaffleOpen() {
@@ -456,6 +473,7 @@ function loadState(stateFile, settings, logger = console) {
     current: normalizeCurrent(stored.current, normalizedSettings),
     history: Array.isArray(stored.history) ? stored.history : [],
     lastError: stored.lastError || null,
+    lastPersistenceError: null,
     nextEventAt: stored.nextEventAt || null,
     settings: normalizedSettings,
     totals: {
@@ -481,36 +499,22 @@ function normalizeCurrent(current, settings) {
 }
 
 function persistState(stateFile, state, logger) {
-  const tempFile = `${stateFile}.${process.pid}.${Date.now()}.tmp`
-
   try {
-    fs.mkdirSync(path.dirname(stateFile), { recursive: true })
-    fs.writeFileSync(tempFile, `${JSON.stringify(state, null, 2)}\n`)
-    replaceFile(tempFile, stateFile)
+    writeJsonFile(stateFile, state)
+    return null
   } catch (error) {
     logger.error(`Failed to persist raffle state: ${error.message}`)
-    cleanupTempFile(tempFile, logger)
+    return error
   }
 }
 
-function replaceFile(tempFile, targetFile) {
-  try {
-    fs.renameSync(tempFile, targetFile)
-  } catch (error) {
-    if (!['EACCES', 'EPERM'].includes(error.code)) throw error
-    fs.copyFileSync(tempFile, targetFile)
-    fs.unlinkSync(tempFile)
-  }
+function cloneState(state) {
+  return JSON.parse(JSON.stringify(state))
 }
 
-function cleanupTempFile(tempFile, logger) {
-  try {
-    if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile)
-  } catch (error) {
-    if (logger && typeof logger.warn === 'function') {
-      logger.warn(`Failed to remove raffle temp file: ${error.message}`)
-    }
-  }
+function restoreState(target, snapshot) {
+  for (const key of Object.keys(target)) delete target[key]
+  Object.assign(target, snapshot)
 }
 
 function readJson(file, logger = console) {
