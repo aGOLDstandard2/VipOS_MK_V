@@ -1723,17 +1723,24 @@ function isNonRetryableStartupError(error) {
 function readTokenConfig(tokenFile) {
   if (!tokenFile || !fs.existsSync(tokenFile)) return {}
 
+  const raw = fs.readFileSync(tokenFile, 'utf8')
+  let data
   try {
-    const data = JSON.parse(fs.readFileSync(tokenFile, 'utf8'))
-    return {
-      accessToken: data.accessToken || data.access_token,
-      expiresIn: numberOrUndefined(data.expiresIn || data.expires_in),
-      obtainmentTimestamp: numberOrUndefined(data.obtainmentTimestamp || data.obtainment_timestamp),
-      refreshToken: data.refreshToken || data.refresh_token,
-      scope: parseScopes(data.scope || data.scopes)
-    }
+    data = JSON.parse(raw)
   } catch (error) {
     throw new TokenConfigError(`Failed to load Twitch token file ${relativePath(tokenFile)}: ${error.message}`)
+  }
+
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new TokenConfigError(`Failed to load Twitch token file ${relativePath(tokenFile)}: token file must contain a JSON object`)
+  }
+
+  return {
+    accessToken: data.accessToken || data.access_token,
+    expiresIn: numberOrUndefined(data.expiresIn || data.expires_in),
+    obtainmentTimestamp: numberOrUndefined(data.obtainmentTimestamp || data.obtainment_timestamp),
+    refreshToken: data.refreshToken || data.refresh_token,
+    scope: parseScopes(data.scope || data.scopes)
   }
 }
 

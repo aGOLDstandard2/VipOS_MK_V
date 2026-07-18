@@ -114,6 +114,51 @@ test('malformed Twitch token files are non-retryable startup errors', () => {
   })
 })
 
+test('non-object Twitch token files are non-retryable startup errors', () => {
+  withTempDirectory(directory => {
+    const tokenFile = path.join(directory, 'twitch-token.json')
+    fs.writeFileSync(tokenFile, '[]')
+
+    assert.throws(
+      () => readTokenConfig(tokenFile),
+      error => (
+        error instanceof TokenConfigError &&
+        isNonRetryableStartupError(error) &&
+        /token file must contain a JSON object/.test(error.message)
+      )
+    )
+  })
+})
+
+test('Twitch token file read failures remain retryable startup errors', () => {
+  withTempDirectory(directory => {
+    const tokenFile = path.join(directory, 'twitch-token.json')
+    const originalReadFileSync = fs.readFileSync
+    fs.writeFileSync(tokenFile, '{}')
+
+    fs.readFileSync = function readFileSyncWithFailure(filePath, ...args) {
+      if (path.resolve(filePath) === path.resolve(tokenFile)) {
+        const error = new Error('temporary read failure')
+        error.code = 'EAGAIN'
+        throw error
+      }
+      return originalReadFileSync.call(this, filePath, ...args)
+    }
+
+    try {
+      assert.throws(
+        () => readTokenConfig(tokenFile),
+        error => (
+          error.code === 'EAGAIN' &&
+          !isNonRetryableStartupError(error)
+        )
+      )
+    } finally {
+      fs.readFileSync = originalReadFileSync
+    }
+  })
+})
+
 test('ordinary startup errors remain retryable', () => {
   assert.equal(isNonRetryableStartupError(new Error('transient failure')), false)
   assert.equal(isNonRetryableStartupError({ nonRetryable: true }), false)
