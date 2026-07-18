@@ -7,7 +7,7 @@ const test = require('node:test')
 
 const localDefaultAlertSound = process.env.DEFAULT_ALERT_SOUND
 process.env.DEFAULT_ALERT_SOUND = ''
-const { attachAppRequestHandler, createApp, createSocketServer } = require('../app')
+const { attachAppRequestHandler, createApp, createSocketServer, startServer } = require('../app')
 if (localDefaultAlertSound !== undefined) process.env.DEFAULT_ALERT_SOUND = localDefaultAlertSound
 else delete process.env.DEFAULT_ALERT_SOUND
 
@@ -123,6 +123,31 @@ function createFakeServices() {
           return {}
         }
       }
+    }
+  }
+}
+
+function createStartServerServices({ io }) {
+  const { services } = createFakeServices()
+
+  return {
+    ...services,
+    chat: {
+      ...services.chat,
+      async start() {},
+      stop() {},
+      getStatus() {
+        return { enabled: false }
+      }
+    },
+    io,
+    obs: {
+      ...services.obs,
+      connect() {}
+    },
+    raffle: {
+      ...services.raffle,
+      startTimers() {}
     }
   }
 }
@@ -276,11 +301,11 @@ async function withTestServer(app, fn) {
   }
 }
 
-async function withSocketTestServer(fn) {
+async function withSocketTestServer(fn, { port } = {}) {
   const server = http.createServer()
-  const io = createSocketServer(server)
+  const io = createSocketServer(server, { port })
   const { services } = createFakeServices()
-  const app = createApp({ ...services, io })
+  const app = createApp({ ...services, io }, { port })
   attachAppRequestHandler(server, app)
 
   await new Promise((resolve, reject) => {
@@ -356,6 +381,70 @@ test('/api/v1/sound enqueues existing sound files', async () => {
   })
 })
 
+test('configured application port controls status and local-origin checks', async () => {
+  const configuredPort = 54321
+  const { enqueued, services } = createFakeServices()
+  const app = createApp(services, { port: configuredPort })
+
+  await withTestServer(app, async baseUrl => {
+    const statusResponse = await fetch(`${baseUrl}/api/v1/status`)
+    const status = await statusResponse.json()
+    assert.equal(status.app.port, configuredPort)
+
+    const response = await fetch(`${baseUrl}/api/v1/sound`, {
+      body: JSON.stringify({ src: 'example.mp3' }),
+      headers: {
+        'content-type': 'application/json',
+        origin: `http://localhost:${configuredPort}`
+      },
+      method: 'POST'
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(enqueued.length, 1)
+  })
+})
+
+test('startServer reports and authorizes its dynamically assigned port', async () => {
+  const { server, services } = startServer({
+    createServices: createStartServerServices,
+    port: 0
+  })
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.once('listening', resolve)
+  })
+
+  try {
+    const { port } = server.address()
+    const baseUrl = `http://127.0.0.1:${port}`
+    const statusResponse = await fetch(`${baseUrl}/api/v1/status`)
+    const status = await statusResponse.json()
+    assert.equal(status.app.port, port)
+
+    const response = await fetch(`${baseUrl}/api/v1/sound`, {
+      body: JSON.stringify({ src: 'example.mp3' }),
+      headers: {
+        'content-type': 'application/json',
+        origin: `http://localhost:${port}`
+      },
+      method: 'POST'
+    })
+
+    assert.equal(response.status, 200)
+
+    const socketResponse = await fetch(`${baseUrl}/socket.io/?EIO=4&transport=polling&t=dynamic-origin`, {
+      headers: { origin: `http://localhost:${port}` }
+    })
+
+    assert.equal(socketResponse.status, 200)
+  } finally {
+    services.io.close()
+    await new Promise(resolve => server.close(resolve))
+  }
+})
+
 test('/api/v1/test runs the tracked default alert sound', async () => {
   const { emitted, services } = createRealQueueServices()
   const app = createApp(services)
@@ -420,4 +509,16 @@ test('Socket.IO polling requests are not handled by Express routes', async () =>
     assert.equal(response.status, 200)
     assert.match(body, /^0/)
   })
+})
+
+test('Socket.IO accepts requests from the configured application port', async () => {
+  const configuredPort = 54322
+
+  await withSocketTestServer(async baseUrl => {
+    const response = await fetch(`${baseUrl}/socket.io/?EIO=4&transport=polling&t=origin`, {
+      headers: { origin: `http://localhost:${configuredPort}` }
+    })
+
+    assert.equal(response.status, 200)
+  }, { port: configuredPort })
 })

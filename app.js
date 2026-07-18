@@ -34,21 +34,17 @@ const VENOM_COIN_LOWER_THIRD_SLIDE_DISTANCE = cssLengthOrDefault(process.env.VEN
 const VENOM_COIN_LOWER_THIRD_SLIDE_DURATION = cssTimeOrDefault(process.env.VENOM_COIN_LOWER_THIRD_SLIDE_DURATION, '300ms')
 const TV_GUIDE_ITEMS_DEFAULT = process.env.TV_GUIDE_ITEMS_DEFAULT || 'config/tv-guide.example.json'
 const TV_GUIDE_ITEMS = readTvGuideItems()
-const ALLOWED_ORIGINS = new Set([
-  `http://localhost:${PORT}`,
-  `http://127.0.0.1:${PORT}`
-])
 
-function createSocketServer(server) {
+function createSocketServer(server, { port = PORT, portContext = createPortContext(port) } = {}) {
   return new Server(server, {
     allowRequest(req, callback) {
-      if (isAllowedOrigin(req.headers.origin)) return callback(null, true)
+      if (portContext.isAllowedOrigin(req.headers.origin)) return callback(null, true)
       return callback('Origin is not allowed', false)
     },
     cors: {
       methods: ['GET', 'POST'],
       origin(origin, callback) {
-        if (isAllowedOrigin(origin)) return callback(null, true)
+        if (portContext.isAllowedOrigin(origin)) return callback(null, true)
         return callback(null, false)
       }
     }
@@ -465,11 +461,37 @@ function cssTimeOrDefault(value, defaultValue) {
 
 
 /**
- * Check if the origin is allowed based on the ALLOWED_ORIGINS
+ * Tracks the port used by the HTTP, Socket.IO, CORS, and status surfaces.
  *
  */
-function isAllowedOrigin(origin) {
-  return !origin || ALLOWED_ORIGINS.has(origin)
+function createPortContext(port = PORT) {
+  let currentPort = port
+
+  function getAllowedOrigins() {
+    return new Set([
+      `http://localhost:${currentPort}`,
+      `http://127.0.0.1:${currentPort}`
+    ])
+  }
+
+  return {
+    getPort() {
+      return currentPort
+    },
+    isAllowedOrigin(origin) {
+      return !origin || getAllowedOrigins().has(origin)
+    },
+    isAllowedReferer(referer) {
+      try {
+        return getAllowedOrigins().has(new URL(referer).origin)
+      } catch (error) {
+        return false
+      }
+    },
+    setPort(port) {
+      currentPort = port
+    }
+  }
 }
 
 
@@ -477,34 +499,30 @@ function isAllowedOrigin(origin) {
  * Require local JSON mutation for API endpoints
  *
  */
-function requireLocalJsonMutation(req, res, next) {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
+function requireLocalJsonMutation(portContext) {
+  return (req, res, next) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
 
-  const origin = req.get('origin')
-  if (!isAllowedOrigin(origin)) {
-    return res.status(403).json({ error: 'Origin is not allowed' })
-  }
-
-  const referer = req.get('referer')
-  if (!origin && referer) {
-    try {
-      if (!ALLOWED_ORIGINS.has(new URL(referer).origin)) {
-        return res.status(403).json({ error: 'Origin is not allowed' })
-      }
-    } catch (error) {
+    const origin = req.get('origin')
+    if (!portContext.isAllowedOrigin(origin)) {
       return res.status(403).json({ error: 'Origin is not allowed' })
     }
-  }
 
-  if (!req.is('application/json')) {
-    return res.status(415).json({ error: 'API mutations require application/json' })
-  }
+    const referer = req.get('referer')
+    if (!origin && referer && !portContext.isAllowedReferer(referer)) {
+      return res.status(403).json({ error: 'Origin is not allowed' })
+    }
 
-  next()
+    if (!req.is('application/json')) {
+      return res.status(415).json({ error: 'API mutations require application/json' })
+    }
+
+    next()
+  }
 }
 
 
-function createApp(services) {
+function createApp(services, { port = PORT, portContext = createPortContext(port) } = {}) {
   const app = express()
   const {
     actions,
@@ -534,11 +552,11 @@ function createApp(services) {
   app.use(cors({
     methods: ['GET', 'POST', 'OPTIONS'],
     origin(origin, callback) {
-      if (isAllowedOrigin(origin)) return callback(null, true)
+      if (portContext.isAllowedOrigin(origin)) return callback(null, true)
       return callback(null, false)
     }
   }))
-  app.use('/api/v1', requireLocalJsonMutation)
+  app.use('/api/v1', requireLocalJsonMutation(portContext))
   app.use(express.json({ limit: '1mb' }))
   app.use(express.urlencoded({ extended: true }))
   app.use(favicon(path.join(__dirname, '/public/assets/img/favicon.ico')))
@@ -650,7 +668,7 @@ function createApp(services) {
       app: {
         name: APP_NAME,
         description: APP_DESCRIPTION,
-        port: PORT
+        port: portContext.getPort()
       },
       obs: obs.getStatus(),
       chat: chat.getStatus(),
@@ -939,15 +957,18 @@ function attachAppRequestHandler(server, app) {
  * Listen on port
  *
  */
-function startServer({ port = PORT } = {}) {
+function startServer({ port = PORT, createServices = createRuntimeServices } = {}) {
   const server = http.createServer()
-  const io = createSocketServer(server)
-  const services = createRuntimeServices({ io })
-  const app = createApp(services)
+  const portContext = createPortContext(port)
+  const io = createSocketServer(server, { portContext })
+  const services = createServices({ io })
+  const app = createApp(services, { portContext })
   attachAppRequestHandler(server, app)
 
   server.listen(port, '127.0.0.1', async () => {
-    console.log(`server is listening on port ${port}....`)
+    const address = server.address()
+    if (address && typeof address === 'object') portContext.setPort(address.port)
+    console.log(`server is listening on port ${portContext.getPort()}....`)
     await startRuntimeServices(services)
   })
 
