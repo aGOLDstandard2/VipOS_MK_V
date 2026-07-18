@@ -119,11 +119,11 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       await loadCommands()
 
       const twurple = await loadTwurple()
-      const auth = await createAuthProvider(twurple, config, logger, {
-        needsBroadcasterToken: config.enableRedemptions || followHandlers.length > 0 || raidHandlers.length > 0 || subscriptionHandlers.length > 0,
-        needsFollowScopes: followHandlers.length > 0,
-        needsSubscriptionScopes: subscriptionHandlers.length > 0
-      })
+      const auth = await createAuthProvider(twurple, config, logger, getEventSubAuthRequirements({
+        config,
+        followHandlers,
+        subscriptionHandlers
+      }))
       authProvider = auth.authProvider
       state.authMode = auth.mode
       state.botUserId = auth.botUserId
@@ -1673,6 +1673,18 @@ function getUnsubscribedEventSubHandlerGroups(configuredGroups, subscribedGroups
   return [...configuredGroups].filter(group => !subscribedGroups.has(group))
 }
 
+function getEventSubAuthRequirements({
+  config = {},
+  followHandlers = [],
+  subscriptionHandlers = []
+} = {}) {
+  return {
+    needsBroadcasterToken: Boolean(config.enableRedemptions) || followHandlers.length > 0 || subscriptionHandlers.length > 0,
+    needsFollowScopes: followHandlers.length > 0,
+    needsSubscriptionScopes: subscriptionHandlers.length > 0
+  }
+}
+
 function readConfig() {
   const broadcasterLogin = process.env.TWITCH_CHANNEL || process.env.TWITCH_BROADCASTER_LOGIN
   const broadcasterId = process.env.TWITCH_CHANNEL_ID || process.env.TWITCH_BROADCASTER_ID
@@ -1857,6 +1869,7 @@ module.exports = {
   FOLLOW_SCOPES,
   ChatConfigError,
   createChatService,
+  getEventSubAuthRequirements,
   getConfiguredEventSubHandlerGroups,
   getUnsubscribedEventSubHandlerGroups,
   isNonRetryableStartupError,

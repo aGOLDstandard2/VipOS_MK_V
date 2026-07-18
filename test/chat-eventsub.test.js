@@ -7,6 +7,7 @@ const test = require('node:test')
 const {
   ChatConfigError,
   createChatService,
+  getEventSubAuthRequirements,
   getConfiguredEventSubHandlerGroups,
   getUnsubscribedEventSubHandlerGroups,
   isNonRetryableStartupError,
@@ -96,6 +97,43 @@ test('EventSub restart comparison reports only newly configured groups', () => {
   assert.deepEqual(
     getUnsubscribedEventSubHandlerGroups(configuredGroups, subscribedGroups),
     ['raids', 'reward update events']
+  )
+})
+
+test('raid-only EventSub handlers do not require broadcaster token auth', () => {
+  assert.deepEqual(
+    getEventSubAuthRequirements({
+      config: { enableRedemptions: false },
+      raidHandlers: [{}]
+    }),
+    {
+      needsBroadcasterToken: false,
+      needsFollowScopes: false,
+      needsSubscriptionScopes: false
+    }
+  )
+})
+
+test('follow, subscription, and redemption EventSub handlers still require broadcaster token auth', () => {
+  assert.equal(
+    getEventSubAuthRequirements({
+      config: { enableRedemptions: false },
+      followHandlers: [{}]
+    }).needsBroadcasterToken,
+    true
+  )
+  assert.equal(
+    getEventSubAuthRequirements({
+      config: { enableRedemptions: false },
+      subscriptionHandlers: [{}]
+    }).needsBroadcasterToken,
+    true
+  )
+  assert.equal(
+    getEventSubAuthRequirements({
+      config: { enableRedemptions: true }
+    }).needsBroadcasterToken,
+    true
   )
 })
 
