@@ -10,7 +10,7 @@
     "pointAmounts": [100, 150, 200, 250, 300, 350, 400, 450, 500],
     "pointName": "cassette tapes",
     "pointTwitchEmoji": "drvipeCassette",
-    "alertSound": "kitt_scanner.mp3",
+    "alertSound": "example.mp3",
     "maxHistory": 50
   },
   "totals": {

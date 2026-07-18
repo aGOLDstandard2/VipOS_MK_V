@@ -11,7 +11,7 @@ const FALLBACK_MACROS = [
     description: 'Send a quick overlay and sound check.',
     actions: [
       { type: 'overlay.alert', message: 'VipOS MK V test alert' },
-      { type: 'sound.play', src: 'kitt_scanner.mp3', volume: 1 }
+      { type: 'sound.play', src: 'example.mp3', volume: 1 }
     ]
   },
   {

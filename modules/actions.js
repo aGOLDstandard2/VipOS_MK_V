@@ -5,7 +5,7 @@ const { createGreetingService } = require('./greetings')
 
 const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', 'sounds')
 const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.json')
-const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
+const DEFAULT_ALERT_SOUND = 'example.mp3'
 const MAX_ACTION_DELAY_MS = 10 * 60 * 1000
 const SOUND_LIST_CACHE_TTL_MS = 5000
 const DEFAULT_LARGE_SOUND_WARNING_BYTES = 25 * 1024 * 1024

@@ -63,7 +63,7 @@
       "actions": [
         { "type": "context.pickRandom", "contextKey": "greeting" },
         { "type": "overlay.alert", "message": "{greeting}, {displayName}!" },
-        { "type": "sound.play", "src": "kitt_scanner.mp3", "volume": 1 }
+        { "type": "sound.play", "src": "example.mp3", "volume": 1 }
       ]
     }
   ],
@@ -128,7 +128,7 @@
       },
       "actions": [
         { "type": "overlay.alert", "message": "BIG RAID: {displayName} brought {raid.viewers} viewers!" },
-        { "type": "sound.play", "src": "kitt_scanner.mp3", "volume": 1 }
+        { "type": "sound.play", "src": "example.mp3", "volume": 1 }
       ]
     }
   ],

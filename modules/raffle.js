@@ -9,7 +9,7 @@ const DEFAULT_COUNTDOWN_INTERVAL_MS = 30 * 1000
 const DEFAULT_POINT_AMOUNTS = [100, 150, 200, 250, 300, 350, 400, 450, 500]
 const DEFAULT_POINT_NAME = 'raffle points'
 const DEFAULT_POINT_TWITCH_EMOJI = ''
-const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
+const DEFAULT_ALERT_SOUND = 'example.mp3'
 const DEFAULT_ENTRY_COMMAND = '!join'
 const DEFAULT_POINTS_COMMAND = '!points'
 

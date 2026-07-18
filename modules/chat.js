@@ -1697,7 +1697,7 @@ function readConfig() {
     clientSecret: process.env.TWITCH_CLIENT_SECRET,
     commandPrefix: process.env.CHAT_COMMAND_PREFIX || DEFAULT_COMMAND_PREFIX,
     commandsFile: resolveAppPath(process.env.CHAT_COMMANDS_FILE, DEFAULT_COMMANDS_FILE),
-    defaultAlertSound: process.env.DEFAULT_ALERT_SOUND || 'kitt_scanner.mp3',
+    defaultAlertSound: process.env.DEFAULT_ALERT_SOUND || 'example.mp3',
     enableHighlightAlerts: parseBool(process.env.CHAT_ENABLE_HIGHLIGHT_ALERTS, false),
     enableRedemptions: parseBool(process.env.CHAT_ENABLE_REDEMPTIONS, Boolean(process.env.TWITCH_BROADCASTER_REFRESH_TOKEN)),
     enabled: parseBool(process.env.CHAT_ENABLED, false),
