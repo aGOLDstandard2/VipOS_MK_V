@@ -274,6 +274,44 @@ test('random sound uses primary text config when it exists', async () => {
   })
 })
 
+test('random sound falls back to example text config when primary config is malformed', async () => {
+  await withTempDirectory(async directory => {
+    const soundDirectory = path.join(directory, 'sounds')
+    const configDirectory = path.join(directory, 'config')
+    fs.mkdirSync(soundDirectory)
+    fs.mkdirSync(configDirectory)
+    createTinyWav(path.join(soundDirectory, 'example.wav'))
+    fs.writeFileSync(path.join(configDirectory, 'sfx-text.json'), '{not json')
+    fs.writeFileSync(path.join(configDirectory, 'sfx-text.example.json'), JSON.stringify({
+      'example.wav': 'Example fallback'
+    }))
+
+    const warnings = []
+    const actions = createActionRunner({
+      io: { emit() {} },
+      logger: {
+        error() {},
+        log() {},
+        warn(message) {
+          warnings.push(message)
+        }
+      },
+      obs: {},
+      soundDirectory,
+      soundTextFile: path.join(configDirectory, 'sfx-text.json')
+    })
+    const context = {}
+
+    await actions.run({ type: 'sound.pickRandom', contextKey: 'sfx' }, context)
+
+    assert.equal(context.sfx.src, 'example.wav')
+    assert.equal(context.sfx.text, 'Example fallback')
+    assert.equal(warnings.length, 2)
+    assert.match(warnings[0], /Failed to load sound text map/)
+    assert.match(warnings[1], /Using fallback sound text map/)
+  })
+})
+
 test('random sound can use inline text map as the eligible sound pool', async () => {
   await withTempDirectory(async directory => {
     const soundDirectory = path.join(directory, 'sounds')

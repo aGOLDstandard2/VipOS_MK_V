@@ -312,12 +312,26 @@ function isSafeContextPath(pathValue) {
 function loadSoundTextMap(file, logger = console) {
   const source = resolveSoundTextFile(file)
   if (!source) return {}
+  const fallback = getSoundTextExampleFile(source)
 
   try {
     return normalizeSoundTextMap(JSON.parse(fs.readFileSync(source, 'utf8')))
   } catch (error) {
     if (logger && typeof logger.warn === 'function') {
       logger.warn(`Failed to load sound text map ${source}: ${error.message}`)
+    }
+    if (!fallback || fallback === source || !fs.existsSync(fallback)) return {}
+  }
+
+  try {
+    const fallbackMap = normalizeSoundTextMap(JSON.parse(fs.readFileSync(fallback, 'utf8')))
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(`Using fallback sound text map ${fallback}`)
+    }
+    return fallbackMap
+  } catch (fallbackError) {
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(`Failed to load fallback sound text map ${fallback}: ${fallbackError.message}`)
     }
     return {}
   }
