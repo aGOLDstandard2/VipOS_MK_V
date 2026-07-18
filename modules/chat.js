@@ -857,22 +857,24 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
   }
 
   function getMissingEventSubHandlerGroups() {
-    return [...getConfiguredEventSubHandlerGroups()]
-      .filter(group => !subscribedEventSubHandlerGroups.has(group))
+    return getUnsubscribedEventSubHandlerGroups(
+      getCurrentConfiguredEventSubHandlerGroups(),
+      subscribedEventSubHandlerGroups
+    )
   }
 
-  function getConfiguredEventSubHandlerGroups() {
-    return new Set([
-      followHandlers.length ? 'follows' : '',
-      raidHandlers.length ? 'raids' : '',
-      subscriptionHandlers.length ? 'subscriptions' : '',
-      redemptionHandlers.length ? 'redemptions' : '',
-      redemptionUpdateHandlers.length ? 'redemption updates' : '',
-      automaticRedemptionHandlers.length ? 'automatic redemptions' : '',
-      shouldBindRewardEvent('reward.add') ? 'reward add events' : '',
-      shouldBindRewardEvent('reward.update') ? 'reward update events' : '',
-      shouldBindRewardEvent('reward.remove') ? 'reward remove events' : ''
-    ].filter(Boolean))
+  function getCurrentConfiguredEventSubHandlerGroups() {
+    return getConfiguredEventSubHandlerGroups({
+      automaticRedemptionHandlerCount: automaticRedemptionHandlers.length,
+      followHandlerCount: followHandlers.length,
+      raidHandlerCount: raidHandlers.length,
+      redemptionHandlerCount: redemptionHandlers.length,
+      redemptionUpdateHandlerCount: redemptionUpdateHandlers.length,
+      rewardAddEventHandlerCount: shouldBindRewardEvent('reward.add') ? 1 : 0,
+      rewardRemoveEventHandlerCount: shouldBindRewardEvent('reward.remove') ? 1 : 0,
+      rewardUpdateEventHandlerCount: shouldBindRewardEvent('reward.update') ? 1 : 0,
+      subscriptionHandlerCount: subscriptionHandlers.length
+    })
   }
 
   return {
@@ -1641,6 +1643,34 @@ function asArray(value) {
   return Array.isArray(value) ? value : [value]
 }
 
+function getConfiguredEventSubHandlerGroups({
+  automaticRedemptionHandlerCount = 0,
+  followHandlerCount = 0,
+  raidHandlerCount = 0,
+  redemptionHandlerCount = 0,
+  redemptionUpdateHandlerCount = 0,
+  rewardAddEventHandlerCount = 0,
+  rewardRemoveEventHandlerCount = 0,
+  rewardUpdateEventHandlerCount = 0,
+  subscriptionHandlerCount = 0
+} = {}) {
+  return new Set([
+    followHandlerCount ? 'follows' : '',
+    raidHandlerCount ? 'raids' : '',
+    subscriptionHandlerCount ? 'subscriptions' : '',
+    redemptionHandlerCount ? 'redemptions' : '',
+    redemptionUpdateHandlerCount ? 'redemption updates' : '',
+    automaticRedemptionHandlerCount ? 'automatic redemptions' : '',
+    rewardAddEventHandlerCount ? 'reward add events' : '',
+    rewardUpdateEventHandlerCount ? 'reward update events' : '',
+    rewardRemoveEventHandlerCount ? 'reward remove events' : ''
+  ].filter(Boolean))
+}
+
+function getUnsubscribedEventSubHandlerGroups(configuredGroups, subscribedGroups) {
+  return [...configuredGroups].filter(group => !subscribedGroups.has(group))
+}
+
 function readConfig() {
   const broadcasterLogin = process.env.TWITCH_CHANNEL || process.env.TWITCH_BROADCASTER_LOGIN
   const broadcasterId = process.env.TWITCH_CHANNEL_ID || process.env.TWITCH_BROADCASTER_ID
@@ -1795,6 +1825,8 @@ async function loadTwurple() {
 module.exports = {
   FOLLOW_SCOPES,
   createChatService,
+  getConfiguredEventSubHandlerGroups,
+  getUnsubscribedEventSubHandlerGroups,
   REDEMPTION_SCOPES,
   SUBSCRIPTION_SCOPES,
   CHAT_SCOPES
