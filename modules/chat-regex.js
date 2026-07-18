@@ -35,8 +35,90 @@ function validateHandlerRegexSource(source) {
 }
 
 function hasNestedQuantifier(source) {
-  const withoutEscapes = source.replace(/\\./g, '')
-  return /\((?:\?:|\?=|\?!|\?<=|\?<!|)?[^)]*(?:[+*]|\{\d+(?:,\d*)?\})[^)]*\)\s*(?:[+*]|\{\d+(?:,\d*)?\})/.test(withoutEscapes)
+  const groups = []
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+
+    if (char === '\\') {
+      index += 1
+      continue
+    }
+
+    if (char === '[') {
+      index = skipCharacterClass(source, index)
+      if (isQuantifierAt(source, index + 1) && groups.length) {
+        groups[groups.length - 1].hasQuantifiedAtom = true
+      }
+      continue
+    }
+
+    if (char === '(') {
+      groups.push({ hasQuantifiedAtom: false })
+      continue
+    }
+
+    if (char === ')') {
+      const group = groups.pop()
+      if (!group) continue
+
+      const quantifierIndex = nextRegexTokenIndex(source, index + 1)
+      if (isQuantifierAt(source, quantifierIndex)) {
+        if (group.hasQuantifiedAtom) return true
+        if (groups.length) groups[groups.length - 1].hasQuantifiedAtom = true
+      } else if (group.hasQuantifiedAtom && groups.length) {
+        groups[groups.length - 1].hasQuantifiedAtom = true
+      }
+      continue
+    }
+
+    if (isQuantifierAt(source, index)) {
+      index = skipQuantifier(source, index)
+      continue
+    }
+
+    if (isQuantifierAt(source, index + 1) && groups.length) {
+      groups[groups.length - 1].hasQuantifiedAtom = true
+    }
+  }
+
+  return false
+}
+
+function skipCharacterClass(source, startIndex) {
+  for (let index = startIndex + 1; index < source.length; index += 1) {
+    if (source[index] === '\\') {
+      index += 1
+    } else if (source[index] === ']') {
+      return index
+    }
+  }
+  return source.length - 1
+}
+
+function nextRegexTokenIndex(source, startIndex) {
+  let index = startIndex
+  while (/\s/.test(source[index] || '')) index += 1
+  return index
+}
+
+function isQuantifierAt(source, index) {
+  const char = source[index]
+  return char === '+' || char === '*' || char === '?' || isBraceQuantifierAt(source, index)
+}
+
+function isBraceQuantifierAt(source, index) {
+  const match = source.slice(index).match(/^\{\d+(?:,\d*)?\}/)
+  return Boolean(match)
+}
+
+function skipQuantifier(source, index) {
+  if (source[index] === '{') {
+    const match = source.slice(index).match(/^\{\d+(?:,\d*)?\}\??/)
+    if (match) return index + match[0].length - 1
+  }
+  if (source[index + 1] === '?') return index + 1
+  return index
 }
 
 module.exports = {
