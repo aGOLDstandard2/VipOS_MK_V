@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { normalizeRegex, testRegex } = require('./chat-regex')
 
 const CHAT_INTENT = 'chat'
 const BROADCASTER_INTENT = 'broadcaster'
@@ -13,8 +14,6 @@ const CHAT_SCOPES = ['user:read:chat', 'user:write:chat']
 const REDEMPTION_SCOPES = ['channel:read:redemptions', 'channel:manage:redemptions']
 const FOLLOW_SCOPES = ['moderator:read:followers']
 const SUBSCRIPTION_SCOPES = ['channel:read:subscriptions']
-const MAX_HANDLER_REGEX_INPUT_LENGTH = 500
-const MAX_HANDLER_REGEX_PATTERN_LENGTH = 200
 
 let twurpleModules = null
 
@@ -1431,11 +1430,6 @@ function matchesHandler(handler, context) {
   return true
 }
 
-function testRegex(pattern, value) {
-  pattern.lastIndex = 0
-  return pattern.test(String(value || '').slice(0, MAX_HANDLER_REGEX_INPUT_LENGTH))
-}
-
 function warnMissingScopes(actualScopes, requiredScopes, logger, label = 'Twitch bot token') {
   const actual = new Set(actualScopes || [])
   const missing = requiredScopes.filter(scope => !actual.has(scope))
@@ -1580,39 +1574,6 @@ function normalizeMatchValue(value) {
 
 function normalizeRegexList(value) {
   return asArray(value).map(normalizeRegex).filter(Boolean)
-}
-
-function normalizeRegex(value) {
-  if (value instanceof RegExp) return value
-
-  const text = String(value || '').trim()
-  if (!text) return null
-
-  try {
-    const match = text.match(/^\/(.+)\/([dgimsuvy]*)$/)
-    const source = match ? match[1] : text
-    const flags = match ? match[2] : 'i'
-
-    validateHandlerRegexSource(source)
-    return new RegExp(source, flags)
-  } catch (error) {
-    throw new Error(`Invalid handler input pattern "${text}": ${error.message}`)
-  }
-}
-
-function validateHandlerRegexSource(source) {
-  if (source.length > MAX_HANDLER_REGEX_PATTERN_LENGTH) {
-    throw new Error(`pattern must be ${MAX_HANDLER_REGEX_PATTERN_LENGTH} characters or fewer`)
-  }
-
-  if (hasNestedQuantifier(source)) {
-    throw new Error('pattern cannot use nested quantifiers')
-  }
-}
-
-function hasNestedQuantifier(source) {
-  const withoutEscapes = source.replace(/\\./g, '')
-  return /\((?:\?:|\?=|\?!|\?<=|\?<!|)?[^)]*(?:[+*]|\{\d+(?:,\d*)?\})[^)]*\)\s*(?:[+*]|\{\d+(?:,\d*)?\})/.test(withoutEscapes)
 }
 
 function normalizeEventList(value) {
@@ -1836,9 +1797,5 @@ module.exports = {
   createChatService,
   REDEMPTION_SCOPES,
   SUBSCRIPTION_SCOPES,
-  CHAT_SCOPES,
-  _private: {
-    normalizeRegex,
-    testRegex
-  }
+  CHAT_SCOPES
 }
