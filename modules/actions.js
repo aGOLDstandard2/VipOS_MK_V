@@ -6,6 +6,7 @@ const { createGreetingService } = require('./greetings')
 const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', 'sounds')
 const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.json')
 const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
+const MAX_ACTION_DELAY_MS = 10 * 60 * 1000
 const SOUND_FILE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 const SOUND_PATH_PATTERN = /^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 
@@ -79,7 +80,7 @@ function createActionRunner({
 
     switch (type) {
       case 'delay': {
-        const ms = Number(action.ms || action.duration || 0)
+        const ms = normalizeActionDelay(action.ms ?? action.duration ?? 0)
         if (ms > 0) await wait(ms)
         return { type, ms }
       }
@@ -426,6 +427,18 @@ function resolveSoundPath(src, soundDirectory) {
 function asArray(value) {
   if (value === undefined || value === null || value === '') return []
   return Array.isArray(value) ? value : [value]
+}
+
+function normalizeActionDelay(value) {
+  if (value === undefined || value === null || value === '') return 0
+
+  const delay = Number(value)
+  if (!Number.isFinite(delay)) {
+    throw userInputError('delay action requires a finite millisecond value')
+  }
+  if (delay <= 0) return 0
+
+  return Math.min(Math.round(delay), MAX_ACTION_DELAY_MS)
 }
 
 function pickInlineItem(value) {
