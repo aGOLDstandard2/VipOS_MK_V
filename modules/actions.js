@@ -446,17 +446,23 @@ function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger, du
       collectSoundFiles(soundDirectory, relativePath, sounds, logger, durationCache, largeSoundWarningBytes)
     } else if (entry.isFile() && validateSoundSrc(src)) {
       const filePath = path.join(soundDirectory, relativePath)
-      const stat = fs.statSync(filePath)
-      const durationMs = getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache, largeSoundWarningBytes)
-      sounds.push({
-        directory: path.dirname(src) === '.' ? '' : path.dirname(src),
-        durationMs,
-        extension: path.extname(src).slice(1).toLowerCase(),
-        filename: entry.name,
-        name: path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim(),
-        sizeBytes: stat.size,
-        src
-      })
+      try {
+        const stat = fs.statSync(filePath)
+        const durationMs = getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache, largeSoundWarningBytes)
+        sounds.push({
+          directory: path.dirname(src) === '.' ? '' : path.dirname(src),
+          durationMs,
+          extension: path.extname(src).slice(1).toLowerCase(),
+          filename: entry.name,
+          name: path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim(),
+          sizeBytes: stat.size,
+          src
+        })
+      } catch (error) {
+        if (logger && typeof logger.warn === 'function') {
+          logger.warn(`Failed to read sound file ${src}: ${error.message}`)
+        }
+      }
     }
   }
 }

@@ -110,6 +110,47 @@ test('sound listing reuses cached results and returns cloned entries', () => {
   })
 })
 
+test('sound listing skips files that cannot be statted', () => {
+  withTempSoundDirectory(soundDirectory => {
+    const missingPath = path.join(soundDirectory, 'missing.wav')
+    const workingPath = path.join(soundDirectory, 'working.wav')
+    const originalStatSync = fs.statSync
+    const warnings = []
+
+    createTinyWav(missingPath)
+    createTinyWav(workingPath)
+
+    fs.statSync = function statSyncWithMissingFile(filePath, ...args) {
+      if (path.resolve(filePath) === path.resolve(missingPath)) {
+        const error = new Error('simulated missing file')
+        error.code = 'ENOENT'
+        throw error
+      }
+      return originalStatSync.call(this, filePath, ...args)
+    }
+
+    try {
+      const sounds = listSoundFiles({
+        cacheTtlMs: 0,
+        logger: {
+          error() {},
+          log() {},
+          warn(message) {
+            warnings.push(message)
+          }
+        },
+        soundDirectory
+      })
+
+      assert.deepEqual(sounds.map(sound => sound.src), ['working.wav'])
+      assert.equal(warnings.length, 1)
+      assert.match(warnings[0], /Failed to read sound file missing\.wav/)
+    } finally {
+      fs.statSync = originalStatSync
+    }
+  })
+})
+
 test('sound playback reuses cached duration for unchanged files', async () => {
   await withTempSoundDirectory(async soundDirectory => {
     const soundPath = path.join(soundDirectory, 'alert.wav')
