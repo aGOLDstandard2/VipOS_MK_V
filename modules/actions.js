@@ -476,7 +476,7 @@ function getSoundDurationMs(
   }
 }
 
-function assertSoundFileExists(src, soundDirectory) {
+function assertSoundFileExists(src, soundDirectory = DEFAULT_SOUND_DIRECTORY) {
   const filePath = resolveSoundPath(src, soundDirectory)
   if (!filePath) {
     throw userInputError('sound.play requires a local sound path within the sound directory')
@@ -590,6 +590,7 @@ function clamp(value, min, max) {
 }
 
 module.exports = {
+  assertSoundFileExists,
   createActionRunner,
   listSoundFiles,
   validateSoundSrc

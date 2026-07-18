@@ -4,7 +4,7 @@ const os = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
 
-const { createActionRunner, listSoundFiles } = require('../modules/actions')
+const { assertSoundFileExists, createActionRunner, listSoundFiles } = require('../modules/actions')
 
 function createNoopActionRunner() {
   return createActionRunner({
@@ -145,6 +145,18 @@ test('sound playback rejects missing files before emitting overlay events', asyn
       error => error.statusCode === 400 && /file was not found/.test(error.message)
     )
     assert.deepEqual(emitted, [])
+  })
+})
+
+test('sound file preflight accepts existing files and rejects missing files', () => {
+  withTempSoundDirectory(soundDirectory => {
+    createTinyWav(path.join(soundDirectory, 'alert.wav'))
+
+    assert.doesNotThrow(() => assertSoundFileExists('alert.wav', soundDirectory))
+    assert.throws(
+      () => assertSoundFileExists('missing.wav', soundDirectory),
+      error => error.statusCode === 400 && /file was not found/.test(error.message)
+    )
   })
 })
 

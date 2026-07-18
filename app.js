@@ -12,7 +12,7 @@ const favicon = require('serve-favicon')
 const fs = require('fs')
 const path = require('path')
 
-const { createActionRunner, listSoundFiles, validateSoundSrc } = require('./modules/actions')
+const { assertSoundFileExists, createActionRunner, listSoundFiles, validateSoundSrc } = require('./modules/actions')
 const { createActionQueue } = require('./modules/action-queue')
 const { createChatService } = require('./modules/chat')
 const { createGreetingService } = require('./modules/greetings')
@@ -768,6 +768,7 @@ app.post('/api/v1/sound', asyncHandler(async (req, res) => {
       error: 'src must be a local sound path ending in .mp3, .ogg, or .wav'
     })
   }
+  assertSoundFileExists(soundSrc)
 
   enqueueApiActions(res, 'Sound Alert', [
     { type: 'sound.play', src: soundSrc, volume },
