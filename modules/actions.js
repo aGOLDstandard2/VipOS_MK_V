@@ -7,8 +7,11 @@ const DEFAULT_SOUND_DIRECTORY = path.join(__dirname, '..', 'public', 'assets', '
 const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.json')
 const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
 const MAX_ACTION_DELAY_MS = 10 * 60 * 1000
+const SOUND_LIST_CACHE_TTL_MS = 5000
 const SOUND_FILE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 const SOUND_PATH_PATTERN = /^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
+
+const soundListCache = new Map()
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -29,12 +32,30 @@ function validateSoundSrc(src) {
 }
 
 function listSoundFiles({
+  cacheTtlMs = SOUND_LIST_CACHE_TTL_MS,
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
   logger = console
 } = {}) {
+  const resolvedSoundDirectory = path.resolve(soundDirectory)
+  const cached = soundListCache.get(resolvedSoundDirectory)
+  const now = Date.now()
+
+  if (cached && cacheTtlMs > 0 && now - cached.loadedAt < cacheTtlMs) {
+    return cloneSoundList(cached.sounds)
+  }
+
   const sounds = []
-  collectSoundFiles(soundDirectory, '', sounds, logger)
-  return sounds.sort((a, b) => a.src.localeCompare(b.src))
+  const durationCache = cached ? cached.durationCache : new Map()
+  collectSoundFiles(resolvedSoundDirectory, '', sounds, logger, durationCache)
+  sounds.sort((a, b) => a.src.localeCompare(b.src))
+
+  soundListCache.set(resolvedSoundDirectory, {
+    durationCache,
+    loadedAt: now,
+    sounds
+  })
+
+  return cloneSoundList(sounds)
 }
 
 function createActionRunner({
@@ -367,7 +388,7 @@ function getSoundText(src, textMap) {
   return path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim()
 }
 
-function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger) {
+function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger, durationCache) {
   const directory = path.join(soundDirectory, relativeDirectory)
   let entries
 
@@ -385,11 +406,11 @@ function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger) {
     const src = relativePath.replace(/\\/g, '/')
 
     if (entry.isDirectory()) {
-      collectSoundFiles(soundDirectory, relativePath, sounds, logger)
+      collectSoundFiles(soundDirectory, relativePath, sounds, logger, durationCache)
     } else if (entry.isFile() && validateSoundSrc(src)) {
       const filePath = path.join(soundDirectory, relativePath)
       const stat = fs.statSync(filePath)
-      const durationMs = getSoundDurationMs(src, soundDirectory, logger)
+      const durationMs = getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache)
       sounds.push({
         directory: path.dirname(src) === '.' ? '' : path.dirname(src),
         durationMs,
@@ -401,6 +422,24 @@ function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger) {
       })
     }
   }
+}
+
+function getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache) {
+  const cached = durationCache && durationCache.get(src)
+  if (cached && cached.sizeBytes === stat.size && cached.mtimeMs === stat.mtimeMs) {
+    return cached.durationMs
+  }
+
+  const durationMs = getSoundDurationMs(src, soundDirectory, logger)
+  if (durationCache) {
+    durationCache.set(src, {
+      durationMs,
+      mtimeMs: stat.mtimeMs,
+      sizeBytes: stat.size
+    })
+  }
+
+  return durationMs
 }
 
 function getSoundDurationMs(src, soundDirectory, logger = console) {
@@ -422,6 +461,10 @@ function resolveSoundPath(src, soundDirectory) {
   const relative = path.relative(soundDirectory, resolved)
   if (relative.startsWith('..') || path.isAbsolute(relative)) return null
   return resolved
+}
+
+function cloneSoundList(sounds) {
+  return sounds.map(sound => ({ ...sound }))
 }
 
 function asArray(value) {
