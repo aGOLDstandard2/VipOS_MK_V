@@ -154,9 +154,10 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch chat message handler failed: ${error.message}`)
         })
       })
-      bindRewardSubscriptions(listener)
-      bindCommunitySubscriptions(listener)
-      subscribedEventSubHandlerGroups = getConfiguredEventSubHandlerGroups()
+      subscribedEventSubHandlerGroups = new Set([
+        ...bindRewardSubscriptions(listener),
+        ...bindCommunitySubscriptions(listener)
+      ])
       state.commandsRestartRequiredMessage = null
 
       listener.start()
@@ -328,11 +329,13 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
   }
 
   function bindRewardSubscriptions(eventSubListener) {
-    if (!config.enableRedemptions) return
+    const subscribedGroups = new Set()
+
+    if (!config.enableRedemptions) return subscribedGroups
     if (!state.broadcasterAuthUserId) {
       state.rewardsLastError = 'Broadcaster token is required for Twitch reward events'
       logger.warn(state.rewardsLastError)
-      return
+      return subscribedGroups
     }
 
     trackRewardSubscription(() => eventSubListener.onChannelRedemptionAdd(state.broadcasterId, event => {
@@ -341,6 +344,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
         logger.error(`Twitch redemption handler failed: ${error.message}`)
       })
     }))
+    subscribedGroups.add('redemptions')
 
     if (redemptionUpdateHandlers.length) {
       trackRewardSubscription(() => eventSubListener.onChannelRedemptionUpdate(state.broadcasterId, event => {
@@ -349,6 +353,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch redemption update handler failed: ${error.message}`)
         })
       }))
+      subscribedGroups.add('redemption updates')
     }
 
     if (automaticRedemptionHandlers.length) {
@@ -358,6 +363,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch automatic redemption handler failed: ${error.message}`)
         })
       }))
+      subscribedGroups.add('automatic redemptions')
     }
 
     if (shouldBindRewardEvent('reward.add')) {
@@ -367,6 +373,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch reward add handler failed: ${error.message}`)
         })
       }))
+      subscribedGroups.add('reward add events')
     }
 
     if (shouldBindRewardEvent('reward.update')) {
@@ -376,6 +383,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch reward update handler failed: ${error.message}`)
         })
       }))
+      subscribedGroups.add('reward update events')
     }
 
     if (shouldBindRewardEvent('reward.remove')) {
@@ -385,10 +393,15 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch reward remove handler failed: ${error.message}`)
         })
       }))
+      subscribedGroups.add('reward remove events')
     }
+
+    return subscribedGroups
   }
 
   function bindCommunitySubscriptions(eventSubListener) {
+    const subscribedGroups = new Set()
+
     if (followHandlers.length) {
       if (!state.broadcasterAuthUserId) {
         state.lastError = 'Broadcaster token is required for Twitch follow events'
@@ -400,6 +413,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
             logger.error(`Twitch follow handler failed: ${error.message}`)
           })
         })
+        subscribedGroups.add('follows')
       }
     }
 
@@ -410,6 +424,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch raid handler failed: ${error.message}`)
         })
       })
+      subscribedGroups.add('raids')
     }
 
     if (subscriptionHandlers.length) {
@@ -425,7 +440,10 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
           logger.error(`Twitch subscription gift handler failed: ${error.message}`)
         })
       })
+      subscribedGroups.add('subscriptions')
     }
+
+    return subscribedGroups
   }
 
   function shouldBindRewardEvent(eventName) {
@@ -852,7 +870,9 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       redemptionHandlers.length ? 'redemptions' : '',
       redemptionUpdateHandlers.length ? 'redemption updates' : '',
       automaticRedemptionHandlers.length ? 'automatic redemptions' : '',
-      rewardEventHandlers.length ? 'reward events' : ''
+      shouldBindRewardEvent('reward.add') ? 'reward add events' : '',
+      shouldBindRewardEvent('reward.update') ? 'reward update events' : '',
+      shouldBindRewardEvent('reward.remove') ? 'reward remove events' : ''
     ].filter(Boolean))
   }
 
