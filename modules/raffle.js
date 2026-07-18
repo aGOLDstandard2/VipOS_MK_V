@@ -432,8 +432,6 @@ function createRaffleService({
     countdownTimer = null
   }
 
-  startTimers()
-
   return {
     close,
     disable,
@@ -442,6 +440,7 @@ function createRaffleService({
     getStatus,
     handleChatMessage,
     start,
+    startTimers,
     stopTimers,
     toggle
   }

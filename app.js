@@ -82,6 +82,7 @@ function createRuntimeServices({ io }) {
   })
   const chat = createChatService({ actions, actionQueue, raffle })
   actions.setChatService(chat)
+  raffle.startTimers()
 
   return {
     actions,
