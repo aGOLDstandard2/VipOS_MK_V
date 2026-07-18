@@ -42,6 +42,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
   let retryTimer = null
   let rewardEventHandlers = []
   let subscriptionHandlers = []
+  let subscribedEventSubHandlerGroups = new Set()
   let rewardSubscriptionRegistrars = new Map()
   let rewardSubscriptionRetryQueue = new Map()
   let shouldRun = false
@@ -64,6 +65,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
     commandsLoadedAt: null,
     commandsLastError: null,
     commandsPath: relativePath(config.commandsFile),
+    commandsRestartRequiredMessage: null,
     automaticRedemptionHandlerCount: 0,
     chatEntryCount: 0,
     chatEntryHandlerCount: 0,
@@ -154,6 +156,8 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       })
       bindRewardSubscriptions(listener)
       bindCommunitySubscriptions(listener)
+      subscribedEventSubHandlerGroups = getConfiguredEventSubHandlerGroups()
+      state.commandsRestartRequiredMessage = null
 
       listener.start()
       if (!shouldRun) {
@@ -735,6 +739,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       state.automaticRedemptionHandlerCount = 0
       state.rewardEventHandlerCount = 0
       state.commandsLastError = null
+      updateCommandsRestartRequirement()
       logger.warn(`Twitch commands file not found: ${relativePath(config.commandsFile)}`)
       return
     }
@@ -784,6 +789,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       state.commandsLastError = null
       const rewardHandlerCount = state.redemptionHandlerCount + state.redemptionUpdateHandlerCount + state.automaticRedemptionHandlerCount + state.rewardEventHandlerCount
       logger.log(`Loaded ${state.commandCount} Twitch chat command${state.commandCount === 1 ? '' : 's'}, ${rewardHandlerCount} reward handler${rewardHandlerCount === 1 ? '' : 's'}, and ${state.communityEventHandlerCount} community event handler${state.communityEventHandlerCount === 1 ? '' : 's'}`)
+      updateCommandsRestartRequirement()
     } catch (error) {
       state.commandsLastError = error.message
       logger.error(`Failed to load Twitch commands from ${relativePath(config.commandsFile)}: ${error.message}`)
@@ -813,6 +819,41 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       ...state,
       listenerActive: Boolean(listener && listener.isActive)
     }
+  }
+
+  function updateCommandsRestartRequirement() {
+    if (!started || !listener) {
+      state.commandsRestartRequiredMessage = null
+      return
+    }
+
+    const missingGroups = getMissingEventSubHandlerGroups()
+    const message = missingGroups.length
+      ? `Restart required for newly configured Twitch EventSub handlers: ${missingGroups.join(', ')}. Config hot reload updated the handlers, but Twitch EventSub subscriptions are created only at startup.`
+      : null
+
+    if (message && message !== state.commandsRestartRequiredMessage) {
+      logger.warn(message)
+    }
+
+    state.commandsRestartRequiredMessage = message
+  }
+
+  function getMissingEventSubHandlerGroups() {
+    return [...getConfiguredEventSubHandlerGroups()]
+      .filter(group => !subscribedEventSubHandlerGroups.has(group))
+  }
+
+  function getConfiguredEventSubHandlerGroups() {
+    return new Set([
+      followHandlers.length ? 'follows' : '',
+      raidHandlers.length ? 'raids' : '',
+      subscriptionHandlers.length ? 'subscriptions' : '',
+      redemptionHandlers.length ? 'redemptions' : '',
+      redemptionUpdateHandlers.length ? 'redemption updates' : '',
+      automaticRedemptionHandlers.length ? 'automatic redemptions' : '',
+      rewardEventHandlers.length ? 'reward events' : ''
+    ].filter(Boolean))
   }
 
   return {

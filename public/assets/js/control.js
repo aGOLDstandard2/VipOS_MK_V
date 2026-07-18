@@ -262,6 +262,7 @@ function renderStatusDetails(data) {
     ['Commands', formatStatusValue(chat.commandCount)],
     ['Commands loaded', formatDateValue(chat.commandsLoadedAt)],
     ['Commands error', formatStatusValue(chat.commandsLastError)],
+    ['Commands restart', formatStatusValue(chat.commandsRestartRequiredMessage)],
     ['Messages', formatStatusValue(chat.messageCount)],
     ['Last command', formatDateValue(chat.lastCommandAt)],
     ['Greeting theme', formatStatusValue(greetings.activePool)],
