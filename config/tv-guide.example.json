@@ -3,7 +3,7 @@
   "channelSampleSize": 59,
   "channels": [
     {
-      "name": "XVR-86",
+      "name": "XVBS-86",
       "programs": [
         { "title": "BEYOND THE\nEND OF THE DIAL", "colspan": 2 },
         { "title": "SIGNAL\nDRIFT", "colspan": 1 },
@@ -174,7 +174,7 @@
       ]
     },
     {
-      "name": "XVR FM",
+      "name": "XVBS FM",
       "programs": [
         { "title": "WOLFMAN'S\nJUKEBOX", "colspan": 1 },
         { "title": "BROADCASTING\nLOUD", "colspan": 2 },
