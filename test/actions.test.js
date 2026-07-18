@@ -273,3 +273,64 @@ test('random sound uses primary text config when it exists', async () => {
     assert.equal(context.sfx.text, 'Primary config')
   })
 })
+
+test('random sound can use inline text map as the eligible sound pool', async () => {
+  await withTempDirectory(async directory => {
+    const soundDirectory = path.join(directory, 'sounds')
+    fs.mkdirSync(soundDirectory)
+    createTinyWav(path.join(soundDirectory, 'inline.wav'))
+
+    const actions = createActionRunner({
+      io: { emit() {} },
+      logger: { error() {}, log() {}, warn() {} },
+      obs: {},
+      soundDirectory,
+      soundTextFile: path.join(directory, 'missing-sfx-text.json')
+    })
+    const context = {}
+
+    await actions.run({
+      type: 'sound.pickRandom',
+      contextKey: 'sfx',
+      textMap: {
+        'inline.wav': 'Inline map'
+      }
+    }, context)
+
+    assert.equal(context.sfx.src, 'inline.wav')
+    assert.equal(context.sfx.text, 'Inline map')
+  })
+})
+
+test('random sound inline text map overrides configured labels without excluding configured files', async () => {
+  await withTempDirectory(async directory => {
+    const soundDirectory = path.join(directory, 'sounds')
+    const configDirectory = path.join(directory, 'config')
+    fs.mkdirSync(soundDirectory)
+    fs.mkdirSync(configDirectory)
+    createTinyWav(path.join(soundDirectory, 'shared.wav'))
+    fs.writeFileSync(path.join(configDirectory, 'sfx-text.json'), JSON.stringify({
+      'shared.wav': 'Configured label'
+    }))
+
+    const actions = createActionRunner({
+      io: { emit() {} },
+      logger: { error() {}, log() {}, warn() {} },
+      obs: {},
+      soundDirectory,
+      soundTextFile: path.join(configDirectory, 'sfx-text.json')
+    })
+    const context = {}
+
+    await actions.run({
+      type: 'sound.pickRandom',
+      contextKey: 'sfx',
+      labels: {
+        'shared.wav': 'Inline label'
+      }
+    }, context)
+
+    assert.equal(context.sfx.src, 'shared.wav')
+    assert.equal(context.sfx.text, 'Inline label')
+  })
+})

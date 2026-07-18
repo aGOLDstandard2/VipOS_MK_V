@@ -153,14 +153,15 @@ function createActionRunner({
         }
 
         const configuredTextMap = loadSoundTextMap(soundTextFile, logger)
+        const inlineTextMap = normalizeSoundTextMap(action.textMap || action.messages || action.labels)
         const textMap = {
           ...configuredTextMap,
-          ...normalizeSoundTextMap(action.textMap || action.messages || action.labels)
+          ...inlineTextMap
         }
         const pickedSound = pickRandomSound({
           soundDirectory,
           textMap,
-          eligibleFilenames: Object.keys(configuredTextMap)
+          eligibleFilenames: [...Object.keys(configuredTextMap), ...Object.keys(inlineTextMap)]
         })
         setPath(context, contextKey, pickedSound)
 
