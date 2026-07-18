@@ -4,7 +4,7 @@ function createObsService({ logger = console } = {}) {
   const obs = new OBSWebSocket()
   const address = process.env.OBS_ADDRESS
   const password = process.env.OBS_PASSWORD || undefined
-  const reconnectMs = Number(process.env.OBS_RECONNECT_RETRY_INTERVAL) || 5000
+  const reconnectMs = normalizeReconnectMs(process.env.OBS_RECONNECT_RETRY_INTERVAL)
 
   const state = {
     enabled: process.env.OBS_ENABLED !== 'false' && Boolean(address),
@@ -222,9 +222,23 @@ function normalizeMediaAction(action) {
     stop: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP'
   }
 
-  return actions[normalized] || action
+  if (actions[normalized]) return actions[normalized]
+  throw userInputError('obs.media requires one of: play, pause, restart, stop')
+}
+
+function normalizeReconnectMs(value, defaultValue = 5000) {
+  const interval = Number(value)
+  return Number.isFinite(interval) && interval >= 1000 ? Math.round(interval) : defaultValue
+}
+
+function userInputError(message) {
+  const error = new Error(message)
+  error.statusCode = 400
+  return error
 }
 
 module.exports = {
-  createObsService
+  createObsService,
+  normalizeMediaAction,
+  normalizeReconnectMs
 }

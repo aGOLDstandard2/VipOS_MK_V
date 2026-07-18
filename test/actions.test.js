@@ -126,6 +126,28 @@ test('sound playback reuses cached duration for unchanged files', async () => {
   })
 })
 
+test('sound playback rejects missing files before emitting overlay events', async () => {
+  await withTempSoundDirectory(async soundDirectory => {
+    const emitted = []
+    const actions = createActionRunner({
+      io: {
+        emit(event, payload) {
+          emitted.push({ event, payload })
+        }
+      },
+      logger: { error() {}, log() {}, warn() {} },
+      obs: {},
+      soundDirectory
+    })
+
+    await assert.rejects(
+      () => actions.run({ type: 'sound.play', src: 'missing.wav' }),
+      error => error.statusCode === 400 && /file was not found/.test(error.message)
+    )
+    assert.deepEqual(emitted, [])
+  })
+})
+
 test('sound playback warns once for unchanged files above the warning threshold', async () => {
   await withTempSoundDirectory(async soundDirectory => {
     const warnings = []

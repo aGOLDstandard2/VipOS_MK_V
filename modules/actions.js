@@ -138,6 +138,7 @@ function createActionRunner({
         if (!src) {
           throw userInputError('sound.play requires a local sound path ending in .mp3, .ogg, or .wav')
         }
+        assertSoundFileExists(src, soundDirectory)
         const volume = clamp(Number(action.volume ?? 1), 0, 1)
         const durationMs = getSoundDurationMs(src, soundDirectory, logger, largeSoundWarningBytes)
         io.emit('sound-play', { src, volume })
@@ -253,6 +254,7 @@ function createActionRunner({
     const src = validateSoundSrc(hydrate(requestedSrc, context))
     if (!src) return null
 
+    assertSoundFileExists(src, soundDirectory)
     const volume = clamp(Number(action.volume ?? 1), 0, 1)
     const durationMs = getSoundDurationMs(src, soundDirectory, logger, largeSoundWarningBytes)
     io.emit('sound-play', { src, volume })
@@ -474,6 +476,21 @@ function getSoundDurationMs(
   }
 }
 
+function assertSoundFileExists(src, soundDirectory) {
+  const filePath = resolveSoundPath(src, soundDirectory)
+  if (!filePath) {
+    throw userInputError('sound.play requires a local sound path within the sound directory')
+  }
+
+  try {
+    if (fs.statSync(filePath).isFile()) return
+  } catch (error) {
+    throw userInputError(`sound.play file was not found: ${src}`)
+  }
+
+  throw userInputError(`sound.play file was not found: ${src}`)
+}
+
 function warnIfLargeSoundFile(src, stat, logger, largeSoundWarningBytes = DEFAULT_LARGE_SOUND_WARNING_BYTES) {
   if (!largeSoundWarningBytes || stat.size <= largeSoundWarningBytes) return
   if (!logger || typeof logger.warn !== 'function') return
@@ -518,8 +535,9 @@ function readSoundDurationMs(src, soundDirectory, logger = console) {
 }
 
 function resolveSoundPath(src, soundDirectory) {
-  const resolved = path.resolve(soundDirectory, src)
-  const relative = path.relative(soundDirectory, resolved)
+  const resolvedSoundDirectory = path.resolve(soundDirectory)
+  const resolved = path.resolve(resolvedSoundDirectory, src)
+  const relative = path.relative(resolvedSoundDirectory, resolved)
   if (relative.startsWith('..') || path.isAbsolute(relative)) return null
   return resolved
 }
