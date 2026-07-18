@@ -175,7 +175,9 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       state.lastError = error.message
       logger.error(`Twitch chat failed to start: ${error.message}`)
       cleanupListener()
-      scheduleRetry()
+      if (!isNonRetryableStartupError(error)) {
+        scheduleRetry()
+      }
     } finally {
       starting = false
     }
@@ -1707,16 +1709,31 @@ function readConfig() {
   }
 }
 
+class TokenConfigError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'TokenConfigError'
+  }
+}
+
+function isNonRetryableStartupError(error) {
+  return error instanceof TokenConfigError
+}
+
 function readTokenConfig(tokenFile) {
   if (!tokenFile || !fs.existsSync(tokenFile)) return {}
 
-  const data = JSON.parse(fs.readFileSync(tokenFile, 'utf8'))
-  return {
-    accessToken: data.accessToken || data.access_token,
-    expiresIn: numberOrUndefined(data.expiresIn || data.expires_in),
-    obtainmentTimestamp: numberOrUndefined(data.obtainmentTimestamp || data.obtainment_timestamp),
-    refreshToken: data.refreshToken || data.refresh_token,
-    scope: parseScopes(data.scope || data.scopes)
+  try {
+    const data = JSON.parse(fs.readFileSync(tokenFile, 'utf8'))
+    return {
+      accessToken: data.accessToken || data.access_token,
+      expiresIn: numberOrUndefined(data.expiresIn || data.expires_in),
+      obtainmentTimestamp: numberOrUndefined(data.obtainmentTimestamp || data.obtainment_timestamp),
+      refreshToken: data.refreshToken || data.refresh_token,
+      scope: parseScopes(data.scope || data.scopes)
+    }
+  } catch (error) {
+    throw new TokenConfigError(`Failed to load Twitch token file ${relativePath(tokenFile)}: ${error.message}`)
   }
 }
 
@@ -1827,6 +1844,9 @@ module.exports = {
   createChatService,
   getConfiguredEventSubHandlerGroups,
   getUnsubscribedEventSubHandlerGroups,
+  isNonRetryableStartupError,
+  readTokenConfig,
+  TokenConfigError,
   REDEMPTION_SCOPES,
   SUBSCRIPTION_SCOPES,
   CHAT_SCOPES
