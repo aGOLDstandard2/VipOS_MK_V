@@ -571,6 +571,19 @@ function createApp(services, { port = PORT, portContext = createPortContext(port
   const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
   const getBodyMessage = req => req.body.message || req.body.msg || req.query.message || ''
 
+  function enqueueTextAlert(res, req, name) {
+    const message = getBodyMessage(req)
+    if (!message) return res.status(400).json({ error: 'message or msg is required' })
+
+    enqueueApiActions(res, name, [
+      { type: 'overlay.alert', message },
+      { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
+    ], {
+      completionDelayMs: getRequestCompletionDelay(req),
+      fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
+    })
+  }
+
   function enqueueApiActions(res, name, actionList, options = {}) {
     const delayValue = options.completionDelayMs ?? options.delayMs
     const completionDelayMs = delayValue === undefined ? undefined : normalizeCompletionDelay(delayValue)
@@ -795,27 +808,11 @@ function createApp(services, { port = PORT, portContext = createPortContext(port
   }))
 
   app.post('/api/v1/text', asyncHandler(async (req, res) => {
-    const message = getBodyMessage(req)
-    if (!message) return res.status(400).json({ error: 'message or msg is required' })
-    enqueueApiActions(res, 'Text Alert', [
-      { type: 'overlay.alert', message },
-      { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-    ], {
-      completionDelayMs: getRequestCompletionDelay(req),
-      fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
-    })
+    enqueueTextAlert(res, req, 'Text Alert')
   }))
 
   app.post('/api/v1/alert', asyncHandler(async (req, res) => {
-    const message = getBodyMessage(req)
-    if (!message) return res.status(400).json({ error: 'message or msg is required' })
-    enqueueApiActions(res, 'Overlay Alert', [
-      { type: 'overlay.alert', message },
-      { type: 'sound.play', src: DEFAULT_ALERT_SOUND, volume: 1 }
-    ], {
-      completionDelayMs: getRequestCompletionDelay(req),
-      fallbackCompletionDelayMs: DEFAULT_SOUND_COMPLETION_DELAY_MS
-    })
+    enqueueTextAlert(res, req, 'Overlay Alert')
   }))
 
   app.post('/api/v1/sound', asyncHandler(async (req, res) => {

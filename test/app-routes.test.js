@@ -16,6 +16,7 @@ const { createActionRunner } = require('../modules/actions')
 
 function createFakeServices() {
   const enqueued = []
+  const queueControlCalls = []
   const queueSnapshot = {
     activity: [],
     history: [],
@@ -26,6 +27,7 @@ function createFakeServices() {
 
   return {
     enqueued,
+    queueControlCalls,
     services: {
       actions: {
         async run() {
@@ -33,11 +35,27 @@ function createFakeServices() {
         }
       },
       actionQueue: {
+        clear() {
+          queueControlCalls.push('clear')
+          return queueSnapshot
+        },
         enqueue(item) {
           enqueued.push(item)
           return queueSnapshot
         },
         getStatus() {
+          return queueSnapshot
+        },
+        pause() {
+          queueControlCalls.push('pause')
+          return queueSnapshot
+        },
+        resume() {
+          queueControlCalls.push('resume')
+          return queueSnapshot
+        },
+        skipNext() {
+          queueControlCalls.push('skip')
           return queueSnapshot
         }
       },
@@ -381,6 +399,48 @@ test('/api/v1/sound enqueues existing sound files', async () => {
   })
 })
 
+test('/api/v1/text and /api/v1/alert enqueue equivalent alerts with distinct labels', async () => {
+  const { enqueued, services } = createFakeServices()
+  const app = createApp(services)
+
+  await withTestServer(app, async baseUrl => {
+    const text = await postJson(baseUrl, '/api/v1/text', { message: 'Text message' })
+    const alert = await postJson(baseUrl, '/api/v1/alert', { msg: 'Alert message' })
+
+    assert.equal(text.response.status, 200)
+    assert.equal(alert.response.status, 200)
+  })
+
+  assert.deepEqual(enqueued.map(({ actions, context, fallbackCompletionDelayMs, name, source }) => ({
+    actions,
+    context,
+    fallbackCompletionDelayMs,
+    name,
+    source
+  })), [
+    {
+      actions: [
+        { type: 'overlay.alert', message: 'Text message' },
+        { type: 'sound.play', src: 'example.mp3', volume: 1 }
+      ],
+      context: { source: 'api' },
+      fallbackCompletionDelayMs: 4000,
+      name: 'Text Alert',
+      source: 'api'
+    },
+    {
+      actions: [
+        { type: 'overlay.alert', message: 'Alert message' },
+        { type: 'sound.play', src: 'example.mp3', volume: 1 }
+      ],
+      context: { source: 'api' },
+      fallbackCompletionDelayMs: 4000,
+      name: 'Overlay Alert',
+      source: 'api'
+    }
+  ])
+})
+
 test('direct and queued actions reject structural errors with HTTP 400', async () => {
   const { services } = createRealQueueServices()
   const app = createApp(services)
@@ -394,6 +454,28 @@ test('direct and queued actions reject structural errors with HTTP 400', async (
     assert.equal(queued.response.status, 400)
     assert.match(queued.payload.error, /overlay.alert requires message/)
   })
+})
+
+test('queue status and control routes delegate to the action queue', async () => {
+  const { queueControlCalls, services } = createFakeServices()
+  const app = createApp(services)
+
+  await withTestServer(app, async baseUrl => {
+    const statusResponse = await fetch(`${baseUrl}/api/v1/queue`)
+    const status = await statusResponse.json()
+
+    assert.equal(statusResponse.status, 200)
+    assert.deepEqual(status, { ok: true, queue: services.actionQueue.getStatus() })
+
+    for (const endpoint of ['pause', 'resume', 'skip', 'clear']) {
+      const { payload, response } = await postJson(baseUrl, `/api/v1/queue/${endpoint}`, {})
+      assert.equal(response.status, 200)
+      assert.equal(payload.ok, true)
+      assert.deepEqual(payload.queue, services.actionQueue.getStatus())
+    }
+  })
+
+  assert.deepEqual(queueControlCalls, ['pause', 'resume', 'skip', 'clear'])
 })
 
 test('configured application port controls status and local-origin checks', async () => {
