@@ -8,6 +8,7 @@ const DEFAULT_SOUND_TEXT_FILE = path.join(__dirname, '..', 'config', 'sfx-text.j
 const DEFAULT_ALERT_SOUND = 'kitt_scanner.mp3'
 const MAX_ACTION_DELAY_MS = 10 * 60 * 1000
 const SOUND_LIST_CACHE_TTL_MS = 5000
+const DEFAULT_LARGE_SOUND_WARNING_BYTES = 25 * 1024 * 1024
 const SOUND_FILE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 const SOUND_PATH_PATTERN = /^(?:[a-zA-Z0-9][a-zA-Z0-9 _.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9 _.-]*\.(mp3|ogg|wav)$/i
 
@@ -33,6 +34,7 @@ function validateSoundSrc(src) {
 
 function listSoundFiles({
   cacheTtlMs = SOUND_LIST_CACHE_TTL_MS,
+  largeSoundWarningBytes = DEFAULT_LARGE_SOUND_WARNING_BYTES,
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
   logger = console
 } = {}) {
@@ -46,7 +48,7 @@ function listSoundFiles({
 
   const sounds = []
   const durationCache = cached ? cached.durationCache : new Map()
-  collectSoundFiles(resolvedSoundDirectory, '', sounds, logger, durationCache)
+  collectSoundFiles(resolvedSoundDirectory, '', sounds, logger, durationCache, largeSoundWarningBytes)
   sounds.sort((a, b) => a.src.localeCompare(b.src))
 
   soundListCache.set(resolvedSoundDirectory, {
@@ -65,6 +67,7 @@ function createActionRunner({
   greetings = createGreetingService({ logger }),
   quietMode = null,
   defaultAlertSound = process.env.DEFAULT_ALERT_SOUND || DEFAULT_ALERT_SOUND,
+  largeSoundWarningBytes = DEFAULT_LARGE_SOUND_WARNING_BYTES,
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
   soundTextFile = DEFAULT_SOUND_TEXT_FILE,
   waitForDelay = wait,
@@ -136,7 +139,7 @@ function createActionRunner({
           throw userInputError('sound.play requires a local sound path ending in .mp3, .ogg, or .wav')
         }
         const volume = clamp(Number(action.volume ?? 1), 0, 1)
-        const durationMs = getSoundDurationMs(src, soundDirectory, logger)
+        const durationMs = getSoundDurationMs(src, soundDirectory, logger, largeSoundWarningBytes)
         io.emit('sound-play', { src, volume })
         return { type, src, volume, durationMs }
       }
@@ -251,7 +254,7 @@ function createActionRunner({
     if (!src) return null
 
     const volume = clamp(Number(action.volume ?? 1), 0, 1)
-    const durationMs = getSoundDurationMs(src, soundDirectory, logger)
+    const durationMs = getSoundDurationMs(src, soundDirectory, logger, largeSoundWarningBytes)
     io.emit('sound-play', { src, volume })
     return { type: 'sound.play', src, volume, durationMs, source: 'overlay.alert' }
   }
@@ -389,7 +392,7 @@ function getSoundText(src, textMap) {
   return path.basename(src, path.extname(src)).replace(/[_ .-]+/g, ' ').trim()
 }
 
-function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger, durationCache) {
+function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger, durationCache, largeSoundWarningBytes) {
   const directory = path.join(soundDirectory, relativeDirectory)
   let entries
 
@@ -407,11 +410,11 @@ function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger, du
     const src = relativePath.replace(/\\/g, '/')
 
     if (entry.isDirectory()) {
-      collectSoundFiles(soundDirectory, relativePath, sounds, logger, durationCache)
+      collectSoundFiles(soundDirectory, relativePath, sounds, logger, durationCache, largeSoundWarningBytes)
     } else if (entry.isFile() && validateSoundSrc(src)) {
       const filePath = path.join(soundDirectory, relativePath)
       const stat = fs.statSync(filePath)
-      const durationMs = getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache)
+      const durationMs = getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache, largeSoundWarningBytes)
       sounds.push({
         directory: path.dirname(src) === '.' ? '' : path.dirname(src),
         durationMs,
@@ -425,13 +428,14 @@ function collectSoundFiles(soundDirectory, relativeDirectory, sounds, logger, du
   }
 }
 
-function getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache) {
+function getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCache, largeSoundWarningBytes) {
   const cached = durationCache && durationCache.get(src)
   if (cached && cached.sizeBytes === stat.size && cached.mtimeMs === stat.mtimeMs) {
     return cached.durationMs
   }
 
-  const durationMs = getSoundDurationMs(src, soundDirectory, logger)
+  warnIfLargeSoundFile(src, stat, logger, largeSoundWarningBytes)
+  const durationMs = readSoundDurationMs(src, soundDirectory, logger)
   if (durationCache) {
     durationCache.set(src, {
       durationMs,
@@ -443,7 +447,63 @@ function getCachedSoundDurationMs(src, soundDirectory, stat, logger, durationCac
   return durationMs
 }
 
-function getSoundDurationMs(src, soundDirectory, logger = console) {
+function getSoundDurationMs(
+  src,
+  soundDirectory,
+  logger = console,
+  largeSoundWarningBytes = DEFAULT_LARGE_SOUND_WARNING_BYTES
+) {
+  const filePath = resolveSoundPath(src, soundDirectory)
+  if (!filePath) return null
+
+  try {
+    const stat = fs.statSync(filePath)
+    return getCachedSoundDurationMs(
+      src,
+      soundDirectory,
+      stat,
+      logger,
+      getSoundDurationCache(soundDirectory),
+      largeSoundWarningBytes
+    )
+  } catch (error) {
+    if (logger && typeof logger.warn === 'function') {
+      logger.warn(`Failed to read sound duration for ${src}: ${error.message}`)
+    }
+    return null
+  }
+}
+
+function warnIfLargeSoundFile(src, stat, logger, largeSoundWarningBytes = DEFAULT_LARGE_SOUND_WARNING_BYTES) {
+  if (!largeSoundWarningBytes || stat.size <= largeSoundWarningBytes) return
+  if (!logger || typeof logger.warn !== 'function') return
+
+  logger.warn(
+    `Sound file ${src} is ${formatBytes(stat.size)}; duration detection reads the full file once and may briefly slow playback startup.`
+  )
+}
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${bytes} B`
+}
+
+function getSoundDurationCache(soundDirectory) {
+  const resolvedSoundDirectory = path.resolve(soundDirectory)
+  let cached = soundListCache.get(resolvedSoundDirectory)
+  if (!cached) {
+    cached = {
+      durationCache: new Map(),
+      loadedAt: 0,
+      sounds: []
+    }
+    soundListCache.set(resolvedSoundDirectory, cached)
+  }
+  return cached.durationCache
+}
+
+function readSoundDurationMs(src, soundDirectory, logger = console) {
   const filePath = resolveSoundPath(src, soundDirectory)
   if (!filePath) return null
 
