@@ -14,23 +14,6 @@ function createNoopActionRunner() {
   })
 }
 
-function withImmediateTimeout(fn) {
-  const originalSetTimeout = global.setTimeout
-  let lastDelayMs = null
-
-  global.setTimeout = (callback, delayMs) => {
-    lastDelayMs = delayMs
-    callback()
-    return 1
-  }
-
-  return Promise.resolve()
-    .then(() => fn(() => lastDelayMs))
-    .finally(() => {
-      global.setTimeout = originalSetTimeout
-    })
-}
-
 function createTinyWav(filePath) {
   const buffer = Buffer.alloc(44)
   buffer.write('RIFF', 0, 'ascii')
@@ -59,14 +42,21 @@ test('delay actions reject non-finite values', async () => {
 })
 
 test('delay actions cap positive waits at ten minutes', async () => {
-  const actions = createNoopActionRunner()
-
-  await withImmediateTimeout(async getLastDelayMs => {
-    const result = await actions.run({ type: 'delay', ms: 999999999 })
-
-    assert.equal(getLastDelayMs(), 600000)
-    assert.equal(result[0].ms, 600000)
+  let waitedMs = null
+  const actions = createActionRunner({
+    io: { emit() {} },
+    logger: { error() {}, log() {}, warn() {} },
+    obs: {},
+    waitForDelay(ms) {
+      waitedMs = ms
+      return Promise.resolve()
+    }
   })
+
+  const result = await actions.run({ type: 'delay', ms: 999999999 })
+
+  assert.equal(waitedMs, 600000)
+  assert.equal(result[0].ms, 600000)
 })
 
 test('sound listing reuses cached results and returns cloned entries', () => {

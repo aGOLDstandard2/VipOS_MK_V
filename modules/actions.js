@@ -67,6 +67,7 @@ function createActionRunner({
   defaultAlertSound = process.env.DEFAULT_ALERT_SOUND || DEFAULT_ALERT_SOUND,
   soundDirectory = DEFAULT_SOUND_DIRECTORY,
   soundTextFile = DEFAULT_SOUND_TEXT_FILE,
+  waitForDelay = wait,
   overlayEmit = (event, payload) => io.emit(event, payload)
 }) {
   let chatService = null
@@ -102,7 +103,7 @@ function createActionRunner({
     switch (type) {
       case 'delay': {
         const ms = normalizeActionDelay(action.ms ?? action.duration ?? 0)
-        if (ms > 0) await wait(ms)
+        if (ms > 0) await waitForDelay(ms)
         return { type, ms }
       }
 
