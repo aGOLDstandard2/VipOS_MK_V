@@ -287,3 +287,54 @@ test('chat startup does not schedule retry for missing Twitch token config', asy
     })
   })
 })
+
+test('configured reward handlers surface a disabled rewards warning', async () => {
+  await withTempDirectory(async directory => {
+    const commandsFile = path.join(directory, 'commands.json')
+    const tokenFile = path.join(directory, 'missing-token.json')
+    fs.writeFileSync(commandsFile, JSON.stringify({
+      redemptions: [
+        {
+          name: 'hydrate',
+          actions: [
+            { type: 'overlay.alert', message: 'Hydrate' }
+          ]
+        }
+      ]
+    }))
+
+    await withEnv({
+      CHAT_COMMANDS_FILE: commandsFile,
+      CHAT_ENABLE_REDEMPTIONS: 'false',
+      CHAT_ENABLED: 'true',
+      CHAT_RECONNECT_INITIAL_MS: '1',
+      TWITCH_BOT_ACCESS_TOKEN: undefined,
+      TWITCH_BOT_REFRESH_TOKEN: undefined,
+      TWITCH_BOT_TOKEN: undefined,
+      TWITCH_BROADCASTER_REFRESH_TOKEN: undefined,
+      TWITCH_CLIENT_ID: 'test-client-id',
+      TWITCH_CLIENT_SECRET: undefined,
+      TWITCH_TOKEN_FILE: tokenFile
+    }, async () => {
+      const warnings = []
+      const chat = createChatService({
+        actions: {},
+        logger: {
+          error() {},
+          log() {},
+          warn(message) {
+            warnings.push(message)
+          }
+        }
+      })
+
+      await chat.start()
+      const status = chat.getStatus()
+
+      assert.equal(status.redemptionHandlerCount, 1)
+      assert.match(status.rewardsDisabledMessage, /CHAT_ENABLE_REDEMPTIONS=false/)
+      assert.equal(status.rewardsLastError, status.rewardsDisabledMessage)
+      assert.equal(warnings.filter(message => /CHAT_ENABLE_REDEMPTIONS=false/.test(message)).length, 1)
+    })
+  })
+})

@@ -94,6 +94,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
     redemptionHandlerCount: 0,
     redemptionUpdateHandlerCount: 0,
     rewardsEnabled: config.enableRedemptions,
+    rewardsDisabledMessage: null,
     rewardsLastError: null,
     rewardsNextRetryAt: null,
     rewardEventCount: 0,
@@ -757,6 +758,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       state.redemptionUpdateHandlerCount = 0
       state.automaticRedemptionHandlerCount = 0
       state.rewardEventHandlerCount = 0
+      updateRewardDisabledWarning(0)
       state.commandsLastError = null
       updateCommandsRestartRequirement()
       logger.warn(`Twitch commands file not found: ${relativePath(config.commandsFile)}`)
@@ -807,6 +809,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       state.commandsLoadedAt = new Date().toISOString()
       state.commandsLastError = null
       const rewardHandlerCount = state.redemptionHandlerCount + state.redemptionUpdateHandlerCount + state.automaticRedemptionHandlerCount + state.rewardEventHandlerCount
+      updateRewardDisabledWarning(rewardHandlerCount)
       logger.log(`Loaded ${state.commandCount} Twitch chat command${state.commandCount === 1 ? '' : 's'}, ${rewardHandlerCount} reward handler${rewardHandlerCount === 1 ? '' : 's'}, and ${state.communityEventHandlerCount} community event handler${state.communityEventHandlerCount === 1 ? '' : 's'}`)
       updateCommandsRestartRequirement()
     } catch (error) {
@@ -838,6 +841,23 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
       ...state,
       listenerActive: Boolean(listener && listener.isActive)
     }
+  }
+
+  function updateRewardDisabledWarning(rewardHandlerCount) {
+    const message = !config.enableRedemptions && rewardHandlerCount > 0
+      ? `Configured ${rewardHandlerCount} Twitch reward handler${rewardHandlerCount === 1 ? '' : 's'} will not run because CHAT_ENABLE_REDEMPTIONS=false.`
+      : null
+
+    if (message && message !== state.rewardsDisabledMessage) {
+      logger.warn(message)
+    }
+
+    if (!message && state.rewardsLastError === state.rewardsDisabledMessage) {
+      state.rewardsLastError = null
+    }
+
+    state.rewardsDisabledMessage = message
+    if (message) state.rewardsLastError = message
   }
 
   function updateCommandsRestartRequirement() {
