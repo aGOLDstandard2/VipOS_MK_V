@@ -1816,5 +1816,9 @@ module.exports = {
   createChatService,
   REDEMPTION_SCOPES,
   SUBSCRIPTION_SCOPES,
-  CHAT_SCOPES
+  CHAT_SCOPES,
+  _private: {
+    normalizeRegex,
+    testRegex
+  }
 }
