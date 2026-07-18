@@ -889,7 +889,7 @@ function createChatService({ actions, actionQueue = null, logger = console, raff
 }
 
 async function createAuthProvider(twurple, config, logger, options = {}) {
-  if (!config.clientId) throw new Error('TWITCH_CLIENT_ID is required when CHAT_ENABLED=true')
+  if (!config.clientId) throw new ChatConfigError('TWITCH_CLIENT_ID is required when CHAT_ENABLED=true')
   const needsBroadcasterToken = Boolean(options.needsBroadcasterToken)
   const needsFollowScopes = Boolean(options.needsFollowScopes)
   const needsSubscriptionScopes = Boolean(options.needsSubscriptionScopes)
@@ -903,11 +903,11 @@ async function createAuthProvider(twurple, config, logger, options = {}) {
 
   if (needsBroadcasterToken) {
     if (!config.clientSecret) {
-      throw new Error('TWITCH_CLIENT_SECRET is required when broadcaster EventSub auth is needed')
+      throw new ChatConfigError('TWITCH_CLIENT_SECRET is required when broadcaster EventSub auth is needed')
     }
 
     if (!botRefreshToken) {
-      throw new Error('TWITCH_BOT_REFRESH_TOKEN is required when broadcaster EventSub auth is needed')
+      throw new ChatConfigError('TWITCH_BOT_REFRESH_TOKEN is required when broadcaster EventSub auth is needed')
     }
 
     const broadcasterToken = readTokenConfig(config.broadcasterTokenFile)
@@ -918,7 +918,7 @@ async function createAuthProvider(twurple, config, logger, options = {}) {
     const broadcasterScope = broadcasterToken.scope || config.broadcasterScopes
 
     if (!broadcasterRefreshToken) {
-      throw new Error('TWITCH_BROADCASTER_REFRESH_TOKEN is required when broadcaster EventSub auth is needed')
+      throw new ChatConfigError('TWITCH_BROADCASTER_REFRESH_TOKEN is required when broadcaster EventSub auth is needed')
     }
 
     const authProvider = new twurple.RefreshingAuthProvider({
@@ -974,7 +974,7 @@ async function createAuthProvider(twurple, config, logger, options = {}) {
 
   if (botRefreshToken) {
     if (!config.clientSecret) {
-      throw new Error('TWITCH_CLIENT_SECRET is required when using TWITCH_BOT_REFRESH_TOKEN')
+      throw new ChatConfigError('TWITCH_CLIENT_SECRET is required when using TWITCH_BOT_REFRESH_TOKEN')
     }
 
     const authProvider = new twurple.RefreshingAuthProvider({
@@ -1004,7 +1004,7 @@ async function createAuthProvider(twurple, config, logger, options = {}) {
   }
 
   if (!botAccessToken) {
-    throw new Error('TWITCH_BOT_ACCESS_TOKEN and TWITCH_BOT_REFRESH_TOKEN are required when CHAT_ENABLED=true')
+    throw new ChatConfigError('TWITCH_BOT_ACCESS_TOKEN and TWITCH_BOT_REFRESH_TOKEN are required when CHAT_ENABLED=true')
   }
 
   const authProvider = new twurple.StaticAuthProvider(config.clientId, botAccessToken)
@@ -1709,7 +1709,14 @@ function readConfig() {
   }
 }
 
-class TokenConfigError extends Error {
+class ChatConfigError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'ChatConfigError'
+  }
+}
+
+class TokenConfigError extends ChatConfigError {
   constructor(message) {
     super(message)
     this.name = 'TokenConfigError'
@@ -1717,7 +1724,7 @@ class TokenConfigError extends Error {
 }
 
 function isNonRetryableStartupError(error) {
-  return error instanceof TokenConfigError
+  return error instanceof ChatConfigError
 }
 
 function readTokenConfig(tokenFile) {
@@ -1848,6 +1855,7 @@ async function loadTwurple() {
 
 module.exports = {
   FOLLOW_SCOPES,
+  ChatConfigError,
   createChatService,
   getConfiguredEventSubHandlerGroups,
   getUnsubscribedEventSubHandlerGroups,

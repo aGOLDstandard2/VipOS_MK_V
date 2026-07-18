@@ -5,6 +5,7 @@ const path = require('node:path')
 const test = require('node:test')
 
 const {
+  ChatConfigError,
   createChatService,
   getConfiguredEventSubHandlerGroups,
   getUnsubscribedEventSubHandlerGroups,
@@ -164,6 +165,12 @@ test('ordinary startup errors remain retryable', () => {
   assert.equal(isNonRetryableStartupError({ nonRetryable: true }), false)
 })
 
+test('missing Twitch chat config errors are non-retryable startup errors', () => {
+  const error = new ChatConfigError('TWITCH_CLIENT_ID is required when CHAT_ENABLED=true')
+
+  assert.equal(isNonRetryableStartupError(error), true)
+})
+
 test('chat startup does not schedule retry for malformed Twitch token files', async () => {
   await withTempDirectory(async directory => {
     const tokenFile = path.join(directory, 'twitch-token.json')
@@ -197,6 +204,47 @@ test('chat startup does not schedule retry for malformed Twitch token files', as
 
       assert.equal(status.nextRetryAt, null)
       assert.match(status.lastError, /Failed to load Twitch token file/)
+      assert.equal(errors.length, 1)
+    })
+  })
+})
+
+test('chat startup does not schedule retry for missing Twitch token config', async () => {
+  await withTempDirectory(async directory => {
+    const commandsFile = path.join(directory, 'commands.json')
+    const tokenFile = path.join(directory, 'missing-token.json')
+    fs.writeFileSync(commandsFile, '{"commands":[]}')
+
+    await withEnv({
+      CHAT_COMMANDS_FILE: commandsFile,
+      CHAT_ENABLE_REDEMPTIONS: 'false',
+      CHAT_ENABLED: 'true',
+      CHAT_RECONNECT_INITIAL_MS: '1',
+      TWITCH_BOT_ACCESS_TOKEN: undefined,
+      TWITCH_BOT_REFRESH_TOKEN: undefined,
+      TWITCH_BOT_TOKEN: undefined,
+      TWITCH_BROADCASTER_REFRESH_TOKEN: undefined,
+      TWITCH_CLIENT_ID: 'test-client-id',
+      TWITCH_CLIENT_SECRET: undefined,
+      TWITCH_TOKEN_FILE: tokenFile
+    }, async () => {
+      const errors = []
+      const chat = createChatService({
+        actions: {},
+        logger: {
+          error(message) {
+            errors.push(message)
+          },
+          log() {},
+          warn() {}
+        }
+      })
+
+      await chat.start()
+      const status = chat.getStatus()
+
+      assert.equal(status.nextRetryAt, null)
+      assert.match(status.lastError, /TWITCH_BOT_ACCESS_TOKEN and TWITCH_BOT_REFRESH_TOKEN/)
       assert.equal(errors.length, 1)
     })
   })
