@@ -1,3 +1,8 @@
+# DEPRICATED
+This repo, and it's `sidebark` branch are now depricated, as I have been given keys to the kingdom &#x1F451;<br><br>
+I originally made this fork simply for upstream contribution. I may pick this repo back up at some point, as I have some half-witted plans to "blank slate" the whole thing for new users and build some front-end stuff for onboarding. For the time being however, I'll be helping V I P E R work on content and functionality updates for the actual VipOS_MK_V, [here](https://github.com/vipertronnx/VipOS_MK_V). Until I decide to come back and "rebrand", I'll be leaving this repo in it's current state, archivally if nothing else.<br><br>
+
+
 <p align="center">
 <img src="https://viperverse.tv/assets/img/viper_os_mk5_v2.png" />
 </p>
